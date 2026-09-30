@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+dist/
+*.tsbuildinfo
+.env
+*.log
+android/
+ios/
+.tooling/
+*.apk
+*.aab
+*.keystore
+*.jks
+*.pem
+*.key
+/SPEC.md

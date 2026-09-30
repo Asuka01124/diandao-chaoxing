@@ -1,0 +1,1 @@
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "jsx": "react-jsx", "types": ["react", "react-native", "bun"] }, "include": ["app", "src", "tamagui.config.ts", "expo-env.d.ts"] }

@@ -1,0 +1,1 @@
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "composite": true, "outDir": "dist", "types": ["node", "bun"] }, "include": ["src", "test"] }
