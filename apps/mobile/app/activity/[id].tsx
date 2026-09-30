@@ -10,7 +10,7 @@ export default function ActivityScreen() {
   const account = data?.accounts.find(a => a.id === accountId) ?? data?.accounts[0];
   const activity = data?.activityCache.find(a => a.id === id && a.cacheAccountId === account?.id);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  useEffect(() => { if (!data) router.replace('/'); }, [!!data]);
+  useEffect(() => { if (store.ready && !data?.accounts.length) router.replace('/'); }, [store.ready, data?.accounts.length]);
   useEffect(() => { if (activity && account) void refresh(); }, [id, accountId]);
   if (!data || !activity) return null;
   async function refresh() {

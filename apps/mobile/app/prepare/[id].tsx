@@ -14,7 +14,7 @@ export default function PrepareScreen() {
   const [selected, setSelected] = useState<string[]>(() => selectedIds ? selectedIds.split(',').filter(Boolean) : accountId ? [accountId] : []); const [latitude, setLatitude] = useState(''); const [longitude, setLongitude] = useState(''); const [address, setAddress] = useState('');
   const [code, setCode] = useState(''); const [gesture, setGesture] = useState(''); const [qr, setQr] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  useEffect(() => { if (!data) router.replace('/'); }, [!!data]);
+  useEffect(() => { if (store.ready && !data?.accounts.length) router.replace('/'); }, [store.ready, data?.accounts.length]);
   useEffect(() => { if (qrPayload) setQr(qrPayload); }, [qrPayload]);
   if (!data || !activity) return null;
   function input(): SignInput {

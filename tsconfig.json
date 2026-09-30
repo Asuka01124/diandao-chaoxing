@@ -3,7 +3,6 @@
   "references": [
     { "path": "./packages/shared" },
     { "path": "./packages/provider-adapter" },
-    { "path": "./apps/api" },
     { "path": "./apps/mobile" }
   ]
 }

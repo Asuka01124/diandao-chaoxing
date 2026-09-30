@@ -4,7 +4,7 @@
   "dependencies": {
     "@sign/shared": "0.1.0", "@sign/provider-adapter": "0.1.0", "expo": "~57.0.26", "expo-dev-client": "~57.0.19", "expo-router": "~57.0.24",
     "expo-secure-store": "~57.0.0", "expo-file-system": "~57.0.0", "expo-crypto": "~57.0.0",
-    "expo-local-authentication": "~57.0.0", "expo-camera": "~57.0.0", "expo-image-picker": "~57.0.0", "expo-image-manipulator": "~57.0.20",
+    "expo-camera": "~57.0.0", "expo-image-picker": "~57.0.0", "expo-image-manipulator": "~57.0.20",
     "expo-system-ui": "~57.0.0", "expo-status-bar": "~57.0.0", "react": "19.2.3", "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0", "react-native-screens": "~4.26.0",
     "tamagui": "^2.0.0", "@tamagui/config": "^2.0.0", "zod": "^4.1.0"

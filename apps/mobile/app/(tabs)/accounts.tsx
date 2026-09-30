@@ -1,53 +1,30 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { Input, Text, XStack, YStack } from 'tamagui';
-import { randomUUID } from 'expo-crypto';
-import { api, ClientError } from '../../src/core/api';
 import { useVault } from '../../src/state';
-import { clearStagedPhoto } from '../../src/core/media';
+import { removeAccount, saveLogin, verifyAccount } from '../../src/features/accounts/account-service';
 import { ActionSheet, AppScreen, EmptyState, GroupedList, HeroCard, PrimaryButton, SectionTitle, SettingsRow } from '../../src/ui';
 
 export default function AccountsScreen() {
   const store = useVault(); const data = store.data;
   const [identifier, setIdentifier] = useState(''); const [password, setPassword] = useState(''); const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [selected, setSelected] = useState<string | null>(null); const [reauthId, setReauthId] = useState<string | null>(null);
-  useEffect(() => { if (!data) router.replace('/'); }, [!!data]);
-  if (!data) return null;
+  useEffect(() => { if (store.ready && !data?.accounts.length) router.replace('/'); }, [store.ready, data?.accounts.length]);
+  if (!data?.accounts.length) return null;
   async function add() {
     if (!identifier.trim() || !password) { setError('请输入账号和密码'); return; }
     setBusy(true); setError('');
     try {
-      const session = await api.login(identifier.trim(), password, randomUUID());
-      setPassword('');
-      await store.update(v => {
-        if (reauthId) { const item = v.accounts.find(a => a.id === reauthId); if (!item || item.session.identifier !== session.identifier || item.session.userId !== session.userId) throw new Error('重新授权的账号身份不匹配'); item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); }
-        else { if (v.accounts.some(a => a.session.identifier === session.identifier)) throw new Error('该账号已添加'); v.accounts.push({ id: randomUUID(), label: label.trim() || session.name, session, authorizedAt: new Date().toISOString(), verifiedAt: new Date().toISOString(), state: 'VALID' }); }
-      });
+      await saveLogin(store, identifier, password, label, reauthId ?? undefined);
       setIdentifier(''); setLabel(''); setReauthId(null);
     } catch (e) { setPassword(''); setError(e instanceof Error ? e.message : '添加账号失败'); }
-    finally { setBusy(false); }
+    finally { setPassword(''); setBusy(false); }
   }
   async function check(id: string) {
-    const account = store.get().accounts.find(a => a.id === id); if (!account) return;
     setBusy(true); setError('');
-    try { const session = await api.check(account.session); await store.update(v => { const item = v.accounts.find(a => a.id === id); if (item) { item.session = session; item.verifiedAt = new Date().toISOString(); item.state = 'VALID'; } }); }
-    catch (e) { if (e instanceof ClientError && e.code === 'REAUTH_REQUIRED') await store.update(v => { const item = v.accounts.find(a => a.id === id); if (item) item.state = 'REAUTH_REQUIRED'; }); setError(e instanceof Error ? e.message : '验证失败'); }
+    try { await verifyAccount(store, id); }
+    catch (e) { setError(e instanceof Error ? e.message : '验证失败'); }
     finally { setBusy(false); }
-  }
-  async function remove(id: string) {
-    const orphanUris = store.get().jobs.filter(j => j.accountIds.length === 1 && j.accountIds[0] === id && j.photoUri).map(j => j.photoUri!);
-    await store.update(v => {
-      v.accounts = v.accounts.filter(a => a.id !== id);
-      v.activityCache = v.activityCache.filter(a => a.cacheAccountId !== id);
-      v.attempts = v.attempts.filter(a => a.accountId !== id);
-      v.jobs = v.jobs.map(j => ({
-        ...j,
-        accountIds: j.accountIds.filter(a => a !== id),
-        faceMediaIdByAccount: j.faceMediaIdByAccount ? Object.fromEntries(Object.entries(j.faceMediaIdByAccount).filter(([a]) => a !== id)) : undefined,
-        input: j.input.kind === 'photo' ? { ...j.input, mediaIdByAccount: Object.fromEntries(Object.entries(j.input.mediaIdByAccount).filter(([a]) => a !== id)) } : j.input,
-      })).filter(j => j.accountIds.length > 0);
-    });
-    for (const uri of orphanUris) clearStagedPhoto(uri);
   }
   const target = data.accounts.find(a => a.id === selected);
   return <AppScreen title="账号" subtitle="管理你已授权的学习通账号">
@@ -65,7 +42,7 @@ export default function AccountsScreen() {
     <ActionSheet visible={!!target} title={target?.label ?? ''} onClose={() => setSelected(null)} actions={target ? [
       { label: '验证会话', onPress: () => { void check(target.id); } },
       { label: '重新授权', onPress: () => { setReauthId(target.id); setIdentifier(target.session.identifier); setLabel(target.label); setPassword(''); } },
-      { label: '删除账号及相关资料', danger: true, onPress: () => { void remove(target.id); } },
+      { label: '删除账号及相关资料', danger: true, onPress: () => { void removeAccount(store, target.id).catch(e => setError(e instanceof Error ? e.message : '删除失败')); } },
     ] : []} />
   </AppScreen>;
 }

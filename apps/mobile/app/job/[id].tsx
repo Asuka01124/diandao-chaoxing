@@ -13,7 +13,7 @@ import { AppScreen, GroupedList, HeroCard, Message, PrimaryButton, SectionTitle,
 export default function JobScreen() {
   const { id, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
   const [error, setError] = useState('');
-  useEffect(() => { if (!data) router.replace('/'); }, [!!data]);
+  useEffect(() => { if (store.ready && !data?.accounts.length) router.replace('/'); }, [store.ready, data?.accounts.length]);
   useEffect(() => { if (qrPayload && scannedAt && id) void replaceQrAndResume(store, id, qrPayload, scannedAt).catch(e => setError(e instanceof Error ? e.message : '更新二维码失败')); }, [qrPayload, scannedAt]);
   if (!data) return null; const job = data.jobs.find(j => j.id === id); if (!job) return null;
   async function provideFace(accountId: string, camera: boolean) {

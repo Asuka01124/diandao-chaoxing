@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "多账号签到", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "0.3.0",
+    "name": "多账号签到", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "0.4.0",
     "orientation": "portrait", "userInterfaceStyle": "automatic", "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "dev.local.sign.tool" },
-    "android": { "package": "dev.local.sign.tool", "versionCode": 3, "edgeToEdgeEnabled": true },
+    "android": { "package": "dev.local.sign.tool", "versionCode": 4, "edgeToEdgeEnabled": true },
     "plugins": ["expo-router", "expo-secure-store", ["expo-camera", { "cameraPermission": "用于扫描签到二维码", "recordAudioAndroid": false }], ["expo-image-picker", { "photosPermission": "用于选择签到照片", "cameraPermission": "用于拍摄签到照片" }]],
     "experiments": { "typedRoutes": true }
   }

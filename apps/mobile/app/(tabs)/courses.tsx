@@ -11,9 +11,9 @@ export default function CoursesScreen() {
   const [accountId, setAccountId] = useState<string | null>(null); const [courses, setCourses] = useState<Course[]>([]); const [selected, setSelected] = useState<Course | null>(null);
   const [source, setSource] = useState<'course' | 'group'>('course'); const [groups, setGroups] = useState<ChatGroup[]>([]); const [selectedGroup, setSelectedGroup] = useState<ChatGroup | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  useEffect(() => { if (!data) router.replace('/'); }, [!!data]);
-  if (!data) return null;
-  const activeId = accountId ?? data.accounts[0]?.id; const account = data.accounts.find(a => a.id === activeId);
+  const activeId = accountId ?? data?.accounts[0]?.id ?? ''; const account = data?.accounts.find(a => a.id === activeId);
+  useEffect(() => { if (store.ready && !data?.accounts.length) router.replace('/'); }, [store.ready, data?.accounts.length]);
+  useEffect(() => { if (account) void loadCourses(); }, [account?.id]);
   async function currentSession() {
     if (!account) throw new Error('请选择账号');
     const session = await api.check(account.session);
@@ -34,6 +34,7 @@ export default function CoursesScreen() {
     try { const activities = await api.groupActivities(await currentSession(), selectedGroup.id); await store.update(v => { v.activityCache = [...v.activityCache.filter(a => a.cacheAccountId !== account?.id || a.source !== 'group' || a.groupId !== selectedGroup.id), ...activities.map(a => ({ ...a, cacheAccountId: account!.id }))]; }); }
     catch (e) { setError(e instanceof Error ? e.message : '群聊活动读取失败'); } finally { setBusy(false); }
   }
+  if (!data?.accounts.length) return null;
   const activities = selected ? data.activityCache.filter(a => a.cacheAccountId === activeId && a.source === 'course' && a.courseId === selected.id && a.classId === selected.classId && a.cachedAt && Date.now() - a.cachedAt < 5 * 60_000) : [];
   const chatActivities = selectedGroup ? data.activityCache.filter(a => a.cacheAccountId === activeId && a.source === 'group' && a.groupId === selectedGroup.id && a.cachedAt && Date.now() - a.cachedAt < 5 * 60_000) : [];
   return <AppScreen title="课程" subtitle="查看课程和群聊中的签到活动">
@@ -41,8 +42,8 @@ export default function CoursesScreen() {
     <SectionTitle>使用账号</SectionTitle><GroupedList>{data.accounts.length ? data.accounts.map(a => <SettingsRow key={a.id} title={a.label} detail={a.id === activeId ? '当前账号' : a.session.identifier} symbol={a.label.slice(0, 1)} selected={a.id === activeId} onPress={() => { setAccountId(a.id); setCourses([]); setSelected(null); setGroups([]); setSelectedGroup(null); }} />) : <EmptyState title="尚无可用账号" detail="请先到账号页添加已授权账号" />}</GroupedList>
     <SectionTitle>活动来源</SectionTitle><GroupedList><SettingsRow title="课程" symbol="▤" selected={source === 'course'} onPress={() => setSource('course')} /><SettingsRow title="群聊" symbol="●" selected={source === 'group'} onPress={() => setSource('group')} /></GroupedList>
     {source === 'course' ? <>
-      <YStack marginTop={16}><PrimaryButton onPress={() => { void loadCourses(); }} disabled={!account || busy}>读取课程</PrimaryButton></YStack>
-      <SectionTitle>课程列表</SectionTitle><GroupedList>{courses.length ? courses.map(course => <SettingsRow key={`${course.id}-${course.classId}`} title={course.name} detail={course.teacher} symbol="▤" selected={selected?.id === course.id && selected.classId === course.classId} onPress={() => setSelected(course)} />) : <EmptyState title="暂无课程" detail="点击“读取课程”获取当前账号的课程" />}</GroupedList>
+      <YStack marginTop={16}><PrimaryButton onPress={() => { void loadCourses(); }} disabled={!account || busy}>刷新课程</PrimaryButton></YStack>
+      <SectionTitle>课程列表</SectionTitle><GroupedList>{courses.length ? courses.map(course => <SettingsRow key={`${course.id}-${course.classId}`} title={course.name} detail={course.teacher} symbol="▤" selected={selected?.id === course.id && selected.classId === course.classId} onPress={() => setSelected(course)} />) : <EmptyState title={busy ? '正在读取课程' : '暂无课程'} detail={busy ? '请稍候' : '下拉后可点击“刷新课程”重试'} />}</GroupedList>
       {selected && <><SectionTitle>{selected.name} · 签到活动</SectionTitle><YStack marginBottom={12}><PrimaryButton onPress={() => { void loadActivities(); }} disabled={busy}>刷新活动</PrimaryButton></YStack><GroupedList>{activities.map(activity => <SettingsRow key={activity.id} title={activity.title} detail={`${activity.kind} · ${activity.startTime ? new Date(activity.startTime).toLocaleString() : '时间未知'}`} onPress={() => router.push({ pathname: '/activity/[id]', params: { id: activity.id, accountId: activeId } })} />)}</GroupedList></>}
     </> : <>
       <YStack marginTop={16}><PrimaryButton onPress={() => { void loadGroups(); }} disabled={!account || busy}>读取群聊</PrimaryButton></YStack>

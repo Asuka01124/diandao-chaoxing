@@ -44,6 +44,14 @@ test('两个账号加密保存、重读与单独删除', async () => {
   expect((await vault.read()).accounts.map(a => a.id)).toEqual(['bob']);
 });
 
+test('旧版保存的网关地址在读取时移除', async () => {
+  const vault = new EncryptedVault(ports);
+  const data = emptyVault() as VaultData & { settings: VaultData['settings'] & { apiUrl?: string } };
+  data.settings.apiUrl = 'https://old-gateway.example.com';
+  await vault.write(data);
+  expect(await vault.read()).not.toHaveProperty('settings.apiUrl');
+});
+
 test('只剩备份文件时替换中断仍可恢复原资料', async () => {
   const vault = new EncryptedVault(ports); const first = emptyVault(); first.accounts = [account('alice')]; await vault.write(first);
   files.set('vault.bin.bak', files.get('vault.bin')!); files.delete('vault.bin');

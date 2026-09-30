@@ -5,7 +5,7 @@ import { encryptLoginValue as nodeEncrypt } from './crypto';
 import { decodeBase64 } from './base64';
 import { RequestSession } from './index';
 
-test('手机端加密与网关协议一致', () => {
+test('手机端加密与 Node 协议实现一致', () => {
   expect(nativeEncrypt('用户+123')).toBe(nodeEncrypt('用户+123'));
   const key = Buffer.from('SL2(M/eD');
   const cipher = createCipheriv('des-ede3', Buffer.concat([key, key, key]), null);

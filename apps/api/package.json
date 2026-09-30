@@ -1,6 +1,0 @@
-{
-  "name": "@sign/api", "version": "0.1.0", "private": true, "type": "module",
-  "scripts": { "dev": "tsx watch src/server.ts", "start": "tsx src/server.ts" },
-  "dependencies": { "@sign/shared": "0.1.0", "@sign/provider-adapter": "0.1.0", "fastify": "^5.6.0", "zod": "^4.1.0" },
-  "devDependencies": { "tsx": "^4.20.0" }
-}

@@ -51,21 +51,12 @@ export type AttemptState = typeof attemptStates[number];
 export type Account = { id: string; label: string; session: ProviderSession; authorizedAt: string; verifiedAt?: string; state: 'VALID' | 'UNKNOWN' | 'REAUTH_REQUIRED' };
 export type Job = { id: string; activity: Activity; input: SignInput; accountIds: string[]; photoUri?: string; faceMediaIdByAccount?: Record<string, string>; createdAt: string; state: 'RUNNING' | 'WAITING' | 'DONE' };
 export type Attempt = { jobId: string; accountId: string; state: AttemptState; count: number; updatedAt: string; message?: string; code?: string };
-export type VaultData = { schemaVersion: 1; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; imageRetentionHours: number; appearance: 'system' | 'light' | 'dark'; apiUrl?: string } };
+export type VaultData = { schemaVersion: 1; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; imageRetentionHours: number; appearance: 'system' | 'light' | 'dark' } };
 export const emptyVault = (): VaultData => ({ schemaVersion: 1, accounts: [], activityCache: [], jobs: [], attempts: [], settings: { favoriteLocations: [], imageRetentionHours: 24, appearance: 'system' } });
 
 export const apiErrorCodes = ['INVALID_INPUT', 'NETWORK_TIMEOUT', 'SESSION_EXPIRED', 'REAUTH_REQUIRED', 'ACTIVITY_NOT_FOUND', 'NOT_MEMBER', 'ALREADY_SIGNED', 'QR_EXPIRED', 'LOCATION_REJECTED', 'VALIDATION_FAILED', 'PROVIDER_CHANGED', 'UNSUPPORTED', 'RATE_LIMITED', 'UNKNOWN'] as const;
 export type ApiErrorCode = typeof apiErrorCodes[number];
-export type ApiError = { code: ApiErrorCode; message: string; retryable: boolean; requestId: string };
 export type SignStatus = { state: 'READY' | 'SIGNED' | 'EXPIRED' | 'WAITING_CAPTCHA' | 'WAITING_FACE' | 'WAITING_QR'; message?: string; submitted?: boolean };
-
-export const accountRequestSchema = z.object({ session: sessionSchema });
-export const activityRequestSchema = accountRequestSchema.extend({ activity: activitySchema });
-export const submitRequestSchema = activityRequestSchema.extend({ input: signInputSchema, faceMediaId: z.string().min(1).max(200).optional() });
-export const loginRequestSchema = z.object({ identifier: z.string().trim().min(1), password: z.string().min(1), deviceCode: z.string().min(1) });
-export const activitiesRequestSchema = accountRequestSchema.extend({ courseId: z.string().min(1), classId: z.string().min(1) });
-export const mediaRequestSchema = accountRequestSchema.extend({ jpegBase64: z.string().min(100).max(2_800_000).regex(/^[A-Za-z0-9+/]+={0,2}$/) });
-export const groupActivitiesRequestSchema = accountRequestSchema.extend({ groupId: z.string().min(1).max(200) });
 
 export function validateActivityInput(activity: Activity, input: SignInput): void {
   signInputSchema.parse(input);

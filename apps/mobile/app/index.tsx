@@ -1,16 +1,48 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { YStack } from 'tamagui';
-import { AppScreen, HeroCard, Message, PrimaryButton } from '../src/ui';
+import { Input, Text, YStack } from 'tamagui';
 import { useVault } from '../src/state';
 import { cleanupCompletedPhoto, runJob } from '../src/core/jobs';
+import { saveLogin } from '../src/features/accounts/account-service';
+import { AppScreen, HeroCard, Message, PrimaryButton } from '../src/ui';
 
-export default function UnlockScreen() {
+export default function LoginScreen() {
   const store = useVault();
-  useEffect(() => { if (store.data) { router.replace('/(tabs)/accounts'); for (const job of store.data.jobs) { if (job.state === 'RUNNING') void runJob(store, job.id); else if (job.state === 'DONE') void cleanupCompletedPhoto(store, job.id).catch(() => {}); } } }, [store.data !== null]);
-  return <AppScreen title="多账号签到" subtitle="安全地管理课程签到"><YStack gap={20}>
-    <HeroCard eyebrow="欢迎回来" title="你的签到工作台" detail="用设备锁屏验证解锁。账号、会话和任务结果只保存在本机加密文件中。" />
-    {store.error && <Message>{store.error}</Message>}
-    <PrimaryButton onPress={() => { void store.unlock(); }}>解锁并继续</PrimaryButton>
-  </YStack></AppScreen>;
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (!store.ready || !store.data?.accounts.length) { resumed.current = false; return; }
+    if (!resumed.current) {
+      resumed.current = true;
+      for (const job of store.data.jobs) {
+        if (job.state === 'RUNNING') void runJob(store, job.id);
+        else if (job.state === 'DONE') void cleanupCompletedPhoto(store, job.id).catch(() => {});
+      }
+    }
+    router.replace('/(tabs)/courses');
+  }, [store.ready, store.data?.accounts.length]);
+
+  if (!store.ready) return <AppScreen title="学习通登录"><Message>正在读取本机资料…</Message></AppScreen>;
+  if (!store.data) return <AppScreen title="无法读取资料"><Message>{store.error ?? '请重试'}</Message><YStack marginTop={20}><PrimaryButton onPress={() => { void store.reload(); }}>重试</PrimaryButton></YStack></AppScreen>;
+  if (store.data.accounts.length) return null;
+
+  async function submit() {
+    if (!identifier.trim() || !password) { setError('请输入学习通账号和密码'); return; }
+    setBusy(true); setError('');
+    try { await saveLogin(store, identifier, password); setPassword(''); router.replace('/(tabs)/courses'); }
+    catch (e) { setError(e instanceof Error ? e.message : '登录失败'); }
+    finally { setBusy(false); }
+  }
+  return <AppScreen title="登录学习通" subtitle="使用学习通账号进入课程首页">
+    <HeroCard eyebrow="欢迎使用" title="课程与签到" detail="首次登录后即可查看课程。账号资料加密保存在这台设备。" />
+    <YStack backgroundColor="$panel" borderRadius="$panel" padding={18} marginTop={24} gap={14}>
+      <Input placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={50} />
+      <Input placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={50} />
+      <PrimaryButton disabled={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录并进入课程'}</PrimaryButton>
+    </YStack>
+    {!!error && <Text color="$danger" marginTop={14}>{error}</Text>}
+  </AppScreen>;
 }
