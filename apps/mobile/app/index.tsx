@@ -4,6 +4,7 @@ import { Input, Text, YStack } from 'tamagui';
 import { useVault } from '../src/state';
 import { cleanupCompletedPhoto, runJob } from '../src/core/jobs';
 import { saveLogin } from '../src/features/accounts/account-service';
+import { hasPrimaryAccount } from '../src/features/accounts/account-role';
 import { AppScreen, HeroCard, Message, PrimaryButton } from '../src/ui';
 
 export default function LoginScreen() {
@@ -14,25 +15,26 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const resumed = useRef(false);
   useEffect(() => {
-    if (!store.ready || !store.data?.accounts.length) { resumed.current = false; return; }
+    const data = store.data;
+    if (!store.ready || !hasPrimaryAccount(data)) { resumed.current = false; return; }
     if (!resumed.current) {
       resumed.current = true;
-      for (const job of store.data.jobs) {
+      for (const job of data!.jobs) {
         if (job.state === 'RUNNING') void runJob(store, job.id);
         else if (job.state === 'DONE') void cleanupCompletedPhoto(store, job.id).catch(() => {});
       }
     }
     router.replace('/(tabs)/courses');
-  }, [store.ready, store.data?.accounts.length]);
+  }, [store.ready, store.data?.accounts]);
 
   if (!store.ready) return <AppScreen title="学习通登录"><Message>正在读取本机资料…</Message></AppScreen>;
   if (!store.data) return <AppScreen title="无法读取资料"><Message>{store.error ?? '请重试'}</Message><YStack marginTop={20}><PrimaryButton onPress={() => { void store.reload(); }}>重试</PrimaryButton></YStack></AppScreen>;
-  if (store.data.accounts.length) return null;
+  if (hasPrimaryAccount(store.data)) return null;
 
   async function submit() {
     if (!identifier.trim() || !password) { setError('请输入学习通账号和密码'); return; }
     setBusy(true); setError('');
-    try { await saveLogin(store, identifier, password); setPassword(''); router.replace('/(tabs)/courses'); }
+    try { await saveLogin(store, identifier, password, { role: 'primary' }); setPassword(''); router.replace('/(tabs)/courses'); }
     catch (e) { setError(e instanceof Error ? e.message : '登录失败'); }
     finally { setBusy(false); }
   }

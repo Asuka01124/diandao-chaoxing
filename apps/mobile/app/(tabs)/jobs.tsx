@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import { router } from 'expo-router';
 import { useVault } from '../../src/state';
+import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { AppScreen, EmptyState, GroupedList, HeroCard, SectionTitle, SettingsRow } from '../../src/ui';
 
 export default function JobsScreen() {
-  const { data, ready } = useVault(); useEffect(() => { if (ready && !data?.accounts.length) router.replace('/'); }, [ready, data?.accounts.length]); if (!data?.accounts.length) return null;
+  const { data, ready } = useVault(); useEffect(() => { if (ready && !hasPrimaryAccount(data)) router.replace('/'); }, [ready, data?.accounts]); if (!data || !hasPrimaryAccount(data)) return null;
   const completed = data.jobs.filter(job => job.state === 'DONE').length;
   return <AppScreen title="任务" subtitle="每个账号的签到结果独立记录">
     <HeroCard eyebrow="任务概览" title={`${completed} 个任务已完成`} detail="所有任务和结果都加密保存在本机。提交超时后会先核查远端状态。" />

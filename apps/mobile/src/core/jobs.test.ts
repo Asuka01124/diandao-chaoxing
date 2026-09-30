@@ -28,7 +28,7 @@ const activity: Activity = { id: 'act', courseId: 'course', classId: 'class', so
 const session = (id: string): ProviderSession => ({ identifier: id, encryptedPassword: 'encrypted', cookies: [], userId: id, fid: '0', name: id, deviceCode: id });
 function store() {
   let data: VaultData = emptyVault();
-  data.accounts = ['a', 'b'].map(id => ({ id, label: id, session: session(id), authorizedAt: '', state: 'VALID' }));
+  data.accounts = ['a', 'b'].map(id => ({ id, label: id, role: id === 'a' ? 'primary' as const : 'delegate' as const, session: session(id), authorizedAt: '', state: 'VALID' }));
   return { get: () => data, update: async (change: (value: VaultData) => void) => { const next = structuredClone(data); change(next); data = next; } };
 }
 beforeEach(() => { counter = 0; clearedPhotos.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.preflight = async () => ({ state: 'READY' }); behavior.upload = async () => ({ mediaId: 'image' }); });

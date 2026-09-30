@@ -3,18 +3,26 @@ import { api, ClientError } from '../../core/api';
 import { clearStagedPhoto } from '../../core/media';
 import type { VaultAccess } from '../../core/jobs';
 
-export async function saveLogin(store: VaultAccess, identifier: string, password: string, label = '', reauthId?: string): Promise<void> {
+export async function saveLogin(store: VaultAccess, identifier: string, password: string, options: { label?: string; reauthId?: string; role?: 'primary' | 'delegate' } = {}): Promise<void> {
   const normalized = identifier.trim();
   if (!normalized || !password) throw new Error('请输入学习通账号和密码');
   const session = await api.login(normalized, password, randomUUID());
   await store.update(v => {
-    if (reauthId) {
-      const item = v.accounts.find(a => a.id === reauthId);
+    if (options.reauthId) {
+      const item = v.accounts.find(a => a.id === options.reauthId);
       if (!item || item.session.identifier !== session.identifier || item.session.userId !== session.userId) throw new Error('重新登录的账号身份不匹配');
       item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString();
     } else {
-      if (v.accounts.some(a => a.session.identifier === session.identifier)) throw new Error('该账号已添加');
-      v.accounts.push({ id: randomUUID(), label: label.trim() || session.name, session, authorizedAt: new Date().toISOString(), verifiedAt: new Date().toISOString(), state: 'VALID' });
+      const existing = v.accounts.find(a => a.session.identifier === session.identifier);
+      const role = options.role ?? 'delegate';
+      if (existing && role !== 'primary') throw new Error('该账号已添加');
+      if (existing && existing.session.userId !== session.userId) throw new Error('账号身份与已有资料不匹配');
+      if (role === 'primary') for (const item of v.accounts) item.role = 'delegate';
+      if (existing) {
+        existing.role = 'primary'; existing.session = session; existing.state = 'VALID'; existing.verifiedAt = new Date().toISOString();
+      } else {
+        v.accounts.push({ id: randomUUID(), label: options.label?.trim() || session.name, role, session, authorizedAt: new Date().toISOString(), verifiedAt: new Date().toISOString(), state: 'VALID' });
+      }
     }
   });
 }

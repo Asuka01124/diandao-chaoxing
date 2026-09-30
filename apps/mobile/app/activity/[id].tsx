@@ -3,6 +3,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text, YStack } from 'tamagui';
 import { api } from '../../src/core/api';
 import { useVault } from '../../src/state';
+import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
+import { activityPhase } from '../../src/features/courses/activity-phase';
 import { AppScreen, GroupedList, HeroCard, PrimaryButton, SectionTitle, SettingsRow } from '../../src/ui';
 
 export default function ActivityScreen() {
@@ -10,7 +12,7 @@ export default function ActivityScreen() {
   const account = data?.accounts.find(a => a.id === accountId) ?? data?.accounts[0];
   const activity = data?.activityCache.find(a => a.id === id && a.cacheAccountId === account?.id);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  useEffect(() => { if (store.ready && !data?.accounts.length) router.replace('/'); }, [store.ready, data?.accounts.length]);
+  useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   useEffect(() => { if (activity && account) void refresh(); }, [id, accountId]);
   if (!data || !activity) return null;
   async function refresh() {
@@ -33,11 +35,13 @@ export default function ActivityScreen() {
       router.push({ pathname: '/activity/[id]', params: { id: related.id, accountId: account.id } });
     } catch (e) { setError(e instanceof Error ? e.message : '签退活动读取失败'); } finally { setBusy(false); }
   }
-  return <AppScreen title={activity.title} subtitle={account ? `使用 ${account.label} 查看活动` : '活动详情'} footer={<PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })} disabled={activity.kind === 'unknown'}>准备签到</PrimaryButton>}>
+  const ended = activityPhase(activity) === 'ended';
+  return <AppScreen title={activity.title} subtitle={account ? `使用 ${account.label} 查看活动` : '活动详情'} footer={<PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })} disabled={activity.kind === 'unknown' || ended}>{ended ? '活动已结束' : '选择账号并准备代签'}</PrimaryButton>}>
     <HeroCard eyebrow="签到活动" title={activity.signed === null ? '等待状态确认' : activity.signed ? '你已完成签到' : '可以准备签到'} detail="提交前会再次核查账号、活动和远端签到状态。" />
     <SectionTitle>活动详情</SectionTitle><GroupedList>
       <SettingsRow title="类型" detail={activity.kind} /><SettingsRow title="开始" detail={activity.startTime ? new Date(activity.startTime).toLocaleString() : '未知'} />
       <SettingsRow title="结束" detail={activity.endTime ? new Date(activity.endTime).toLocaleString() : '未知'} /><SettingsRow title="状态" detail={activity.signed === null ? '待查询' : activity.signed ? '已签到' : '未签到'} />
+      <SettingsRow title="活动进度" detail={ended ? '已结束' : '进行中'} />
       <SettingsRow title="验证要求" detail={activity.requirements ? [activity.requirements.captcha && '验证码', activity.requirements.face && '人脸', activity.requirements.location && '位置', activity.requirements.photo && '照片'].filter(Boolean).join('、') || '无' : '待查询'} />
       {activity.relation?.signInId && <SettingsRow title="关联签到 ID" detail={activity.relation.signInId} />}
       {activity.relation?.signOutId && <SettingsRow title="关联签退" detail={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? '尚未发布' : '已发布，点击查看'} onPress={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? undefined : () => { void openSignOut(); }} />}

@@ -35,6 +35,7 @@ export const activitySchema = z.object({
   source: z.enum(['course', 'group']), groupId: z.string().optional(),
   title: z.string(), kind: z.enum(['click', 'location', 'photo', 'qr', 'code', 'gesture', 'unknown']),
   startTime: z.number().nullable(), endTime: z.number().nullable(),
+  status: z.number().int().nullable().optional(),
   signed: z.boolean().nullable(), ext: z.string().default('{}'),
   cachedAt: z.number().optional(),
   cacheAccountId: z.string().optional(),
@@ -43,16 +44,16 @@ export const activitySchema = z.object({
   requirements: z.object({ captcha: z.boolean(), face: z.boolean(), location: z.boolean(), photo: z.boolean() }).optional(),
 });
 export type Activity = z.infer<typeof activitySchema>;
-export type Course = { id: string; classId: string; name: string; teacher?: string };
+export type Course = { id: string; classId: string; name: string; teacher?: string; imageUrl?: string };
 export type ChatGroup = { id: string; name: string };
 
 export const attemptStates = ['QUEUED', 'PREFLIGHT', 'SUBMITTING', 'VERIFYING', 'SUCCESS', 'ALREADY_SIGNED', 'WAITING_QR', 'WAITING_CAPTCHA', 'WAITING_FACE', 'REAUTH_REQUIRED', 'EXPIRED', 'FAILED'] as const;
 export type AttemptState = typeof attemptStates[number];
-export type Account = { id: string; label: string; session: ProviderSession; authorizedAt: string; verifiedAt?: string; state: 'VALID' | 'UNKNOWN' | 'REAUTH_REQUIRED' };
+export type Account = { id: string; label: string; role: 'primary' | 'delegate'; session: ProviderSession; authorizedAt: string; verifiedAt?: string; state: 'VALID' | 'UNKNOWN' | 'REAUTH_REQUIRED' };
 export type Job = { id: string; activity: Activity; input: SignInput; accountIds: string[]; photoUri?: string; faceMediaIdByAccount?: Record<string, string>; createdAt: string; state: 'RUNNING' | 'WAITING' | 'DONE' };
 export type Attempt = { jobId: string; accountId: string; state: AttemptState; count: number; updatedAt: string; message?: string; code?: string };
-export type VaultData = { schemaVersion: 1; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; imageRetentionHours: number; appearance: 'system' | 'light' | 'dark' } };
-export const emptyVault = (): VaultData => ({ schemaVersion: 1, accounts: [], activityCache: [], jobs: [], attempts: [], settings: { favoriteLocations: [], imageRetentionHours: 24, appearance: 'system' } });
+export type VaultData = { schemaVersion: 2; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; imageRetentionHours: number; appearance: 'system' | 'light' | 'dark' } };
+export const emptyVault = (): VaultData => ({ schemaVersion: 2, accounts: [], activityCache: [], jobs: [], attempts: [], settings: { favoriteLocations: [], imageRetentionHours: 24, appearance: 'system' } });
 
 export const apiErrorCodes = ['INVALID_INPUT', 'NETWORK_TIMEOUT', 'SESSION_EXPIRED', 'REAUTH_REQUIRED', 'ACTIVITY_NOT_FOUND', 'NOT_MEMBER', 'ALREADY_SIGNED', 'QR_EXPIRED', 'LOCATION_REJECTED', 'VALIDATION_FAILED', 'PROVIDER_CHANGED', 'UNSUPPORTED', 'RATE_LIMITED', 'UNKNOWN'] as const;
 export type ApiErrorCode = typeof apiErrorCodes[number];

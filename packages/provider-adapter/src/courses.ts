@@ -2,6 +2,14 @@ import type { Course, ProviderSession } from '@sign/shared';
 import { asArray, asObject, json, str } from './response';
 import { RequestSession, type Transport } from './session';
 
+function courseImage(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  try {
+    const url = new URL(value.trim().replace(/^http:\/\//i, 'https://'));
+    return url.protocol === 'https:' ? url.toString() : undefined;
+  } catch { return undefined; }
+}
+
 export async function courses(session: ProviderSession, transport?: Transport): Promise<Course[]> {
   const jar = new RequestSession(session, transport);
   const body = await json(await jar.request('https://mooc1-api.chaoxing.com/mycourse/backclazzdata?view=json&rss=1'));
@@ -9,6 +17,6 @@ export async function courses(session: ProviderSession, transport?: Transport): 
     const item = asObject(raw); const content = asObject(item.content);
     if (!content.course || !item.cataName) return [];
     const course = asObject(asArray(asObject(content.course).data)[0]);
-    return [{ id: str(course.id, 'course.id'), classId: str(content.id, 'class.id'), name: str(course.name, 'course.name'), teacher: typeof course.teacherfactor === 'string' ? course.teacherfactor : undefined }];
+    return [{ id: str(course.id, 'course.id'), classId: str(content.id, 'class.id'), name: str(course.name, 'course.name'), teacher: typeof course.teacherfactor === 'string' ? course.teacherfactor : undefined, imageUrl: courseImage(course.imageurl) }];
   });
 }

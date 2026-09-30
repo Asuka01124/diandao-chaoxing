@@ -31,7 +31,7 @@ const ports: VaultPorts = {
     },
   },
 };
-const account = (id: string): Account => ({ id, label: id, authorizedAt: '', state: 'VALID', session: { identifier: id, encryptedPassword: `credential-${id}`, cookies: [], userId: id, fid: '0', name: id, deviceCode: id } });
+const account = (id: string, role: Account['role'] = 'delegate'): Account => ({ id, label: id, role, authorizedAt: '', state: 'VALID', session: { identifier: id, encryptedPassword: `credential-${id}`, cookies: [], userId: id, fid: '0', name: id, deviceCode: id } });
 beforeEach(() => { files.clear(); key = null; failStagingMove = false; });
 
 test('两个账号加密保存、重读与单独删除', async () => {
@@ -42,6 +42,17 @@ test('两个账号加密保存、重读与单独删除', async () => {
   const updated = await vault.read(); updated.accounts = updated.accounts.filter(a => a.id !== 'alice');
   await vault.write(updated);
   expect((await vault.read()).accounts.map(a => a.id)).toEqual(['bob']);
+});
+
+test('旧版账号角色迁移一次，删除主账号后不会重新提升代签账号', async () => {
+  const vault = new EncryptedVault(ports);
+  const old = { ...emptyVault(), schemaVersion: 1, accounts: [account('alice'), account('bob')] };
+  await vault.write(old as unknown as VaultData);
+  const migrated = await vault.read();
+  expect(migrated.accounts.map(a => a.role)).toEqual(['primary', 'delegate']);
+  migrated.accounts.shift();
+  await vault.write(migrated);
+  expect((await vault.read()).accounts.map(a => a.role)).toEqual(['delegate']);
 });
 
 test('旧版保存的网关地址在读取时移除', async () => {

@@ -8,12 +8,13 @@ import { api } from '../../src/core/api';
 import { checkChallenge, provideFaceAndResume, replacePhotoAndRetry, replaceQrAndResume, retryAttempt, runJob } from '../../src/core/jobs';
 import { clearStagedPhoto, stagePhoto } from '../../src/core/media';
 import { useVault } from '../../src/state';
+import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { AppScreen, GroupedList, HeroCard, Message, PrimaryButton, SectionTitle, SettingsRow, StatusBadge } from '../../src/ui';
 
 export default function JobScreen() {
   const { id, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
   const [error, setError] = useState('');
-  useEffect(() => { if (store.ready && !data?.accounts.length) router.replace('/'); }, [store.ready, data?.accounts.length]);
+  useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   useEffect(() => { if (qrPayload && scannedAt && id) void replaceQrAndResume(store, id, qrPayload, scannedAt).catch(e => setError(e instanceof Error ? e.message : '更新二维码失败')); }, [qrPayload, scannedAt]);
   if (!data) return null; const job = data.jobs.find(j => j.id === id); if (!job) return null;
   async function provideFace(accountId: string, camera: boolean) {

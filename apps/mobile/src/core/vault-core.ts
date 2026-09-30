@@ -28,10 +28,15 @@ export class EncryptedVault {
     if (!hex) throw new Error('本地密钥缺失，现有账号资料无法恢复');
     try {
       const plain = await this.ports.crypto.decrypt(await this.ports.files.read(name), hex);
-      const data = JSON.parse(new TextDecoder().decode(plain)) as VaultData & { settings: VaultData['settings'] & { apiUrl?: string } };
-      if (data.schemaVersion !== 1 || !Array.isArray(data.accounts) || !Array.isArray(data.jobs) || !Array.isArray(data.attempts)) throw new Error('版本不受支持');
+      const data = JSON.parse(new TextDecoder().decode(plain)) as Omit<VaultData, 'schemaVersion'> & { schemaVersion: 1 | 2; settings: VaultData['settings'] & { apiUrl?: string } };
+      if (![1, 2].includes(data.schemaVersion) || !Array.isArray(data.accounts) || !Array.isArray(data.jobs) || !Array.isArray(data.attempts)) throw new Error('版本不受支持');
       delete data.settings.apiUrl;
-      return data;
+      if (data.schemaVersion === 1) {
+        // 旧版没有账号角色；首次登录保存的账号位于第一位。
+        data.accounts = data.accounts.map((account, index) => ({ ...account, role: index === 0 ? 'primary' : 'delegate' }));
+        data.schemaVersion = 2;
+      }
+      return { ...data, schemaVersion: 2 };
     } catch { throw new Error('加密文件校验失败，无法读取任何账号资料'); }
   }
   private async writeNow(data: VaultData): Promise<void> {

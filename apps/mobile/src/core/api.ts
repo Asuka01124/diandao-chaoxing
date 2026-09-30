@@ -1,6 +1,5 @@
-import type { Activity, ChatGroup, Course, ProviderSession, SignInput, SignStatus } from '@sign/shared';
+import type { Activity, Course, ProviderSession, SignInput, SignStatus } from '@sign/shared';
 import * as provider from '@sign/provider-adapter';
-import { groups, groupActivities } from '@sign/provider-adapter/groups';
 
 export class ClientError extends Error {
   constructor(public code: string, message: string, public retryable = false) { super(message); }
@@ -19,8 +18,6 @@ export const api = {
   check: (session: ProviderSession) => direct(() => provider.checkSession(session)),
   courses: (session: ProviderSession) => direct<Course[]>(() => provider.courses(session)),
   activities: (session: ProviderSession, courseId: string, classId: string) => direct(() => provider.activities(session, courseId, classId)),
-  groups: (session: ProviderSession) => direct<ChatGroup[]>(() => groups(session)),
-  groupActivities: (session: ProviderSession, groupId: string) => direct<Activity[]>(() => groupActivities(session, groupId)),
   detail: (session: ProviderSession, activity: Activity) => direct(() => provider.activityDetail(session, activity)),
   preflight: (session: ProviderSession, activity: Activity) => direct<SignStatus>(() => provider.preflight(session, activity)),
   submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string) => direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId)),
