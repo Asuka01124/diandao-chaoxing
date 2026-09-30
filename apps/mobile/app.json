@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "点卯侠", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "0.5.0", "icon": "./assets/icon.png",
+    "name": "点卯侠", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "0.5.1", "icon": "./assets/icon.png",
     "orientation": "portrait", "userInterfaceStyle": "automatic", "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "dev.local.sign.tool" },
-    "android": { "package": "dev.local.sign.tool", "versionCode": 6, "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" } },
-    "plugins": ["expo-router", "expo-secure-store", "@maplibre/maplibre-react-native", ["expo-location", { "locationWhenInUsePermission": "用于在地图上选取签到位置" }], ["expo-camera", { "cameraPermission": "用于扫描签到二维码", "recordAudioAndroid": false }], ["expo-image-picker", { "photosPermission": "用于选择签到照片", "cameraPermission": "用于拍摄签到照片" }]],
+    "android": { "package": "dev.local.sign.tool", "versionCode": 7, "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" } },
+    "plugins": ["expo-router", "expo-secure-store", ["expo-splash-screen", { "backgroundColor": "#ffffff", "image": "./assets/icon.png", "imageWidth": 160 }], "@maplibre/maplibre-react-native", ["expo-location", { "locationWhenInUsePermission": "用于在地图上选取签到位置" }], ["expo-camera", { "cameraPermission": "用于扫描签到二维码", "recordAudioAndroid": false }], ["expo-image-picker", { "photosPermission": "用于选择签到照片", "cameraPermission": "用于拍摄签到照片" }]],
     "experiments": { "typedRoutes": true }
   }
 }

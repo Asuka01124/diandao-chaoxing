@@ -1,9 +1,13 @@
 import { useColorScheme } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { TamaguiProvider, Theme } from 'tamagui';
 import config from '../tamagui.config';
 import { VaultProvider, useVault } from '../src/state';
+import { StartupSplash } from '../src/features/startup/startup-splash';
+
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function ThemedNavigator() {
   const system = useColorScheme();
@@ -15,5 +19,5 @@ function ThemedNavigator() {
 
 export default function RootLayout() {
   const scheme = useColorScheme();
-  return <TamaguiProvider config={config} defaultTheme={scheme === 'dark' ? 'dark' : 'light'}><VaultProvider><ThemedNavigator /></VaultProvider></TamaguiProvider>;
+  return <TamaguiProvider config={config} defaultTheme={scheme === 'dark' ? 'dark' : 'light'}><VaultProvider><ThemedNavigator /><StartupSplash /></VaultProvider></TamaguiProvider>;
 }
