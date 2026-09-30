@@ -16,7 +16,10 @@ async function identity(jar: RequestSession): Promise<{ userId: string; fid: str
 }
 async function loginWithEncrypted(identifier: string, encryptedPassword: string, deviceCode: string, jar = new RequestSession()): Promise<ProviderSession> {
   const result = await json(await jar.request('https://passport2.chaoxing.com/fanyalogin', { method: 'POST', body: loginBody(identifier, encryptedPassword), headers: { 'content-type': 'application/x-www-form-urlencoded' } }));
-  if (result.status !== true && result.status !== 1 && result.status !== 'true') throw new ProviderError('REAUTH_REQUIRED', '学习通未接受登录，请检查账号和密码');
+  if (result.status !== true && result.status !== 1 && result.status !== 'true') {
+    const reason = typeof result.msg2 === 'string' ? result.msg2.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 160) : '';
+    throw new ProviderError('REAUTH_REQUIRED', reason || '学习通未接受登录，请检查账号和密码');
+  }
   if (!jar.exportCookies().length) throw new ProviderError('REAUTH_REQUIRED', '未收到学习通登录会话，请检查网络后重试');
   const user = await identity(jar);
   return { identifier, encryptedPassword, deviceCode, ...user, cookies: jar.exportCookies() };
