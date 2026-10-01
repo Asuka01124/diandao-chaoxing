@@ -50,10 +50,11 @@ export type ChatGroup = { id: string; name: string };
 export const attemptStates = ['QUEUED', 'PREFLIGHT', 'SUBMITTING', 'VERIFYING', 'SUCCESS', 'ALREADY_SIGNED', 'WAITING_QR', 'WAITING_CAPTCHA', 'WAITING_FACE', 'REAUTH_REQUIRED', 'EXPIRED', 'FAILED'] as const;
 export type AttemptState = typeof attemptStates[number];
 export type Account = { id: string; label: string; role: 'primary' | 'delegate'; session: ProviderSession; authorizedAt: string; verifiedAt?: string; state: 'VALID' | 'UNKNOWN' | 'REAUTH_REQUIRED' };
+export type ReservedPhoto = { id: string; createdAt: string };
 export type Job = { id: string; activity: Activity; input: SignInput; accountIds: string[]; photoUri?: string; faceMediaIdByAccount?: Record<string, string>; createdAt: string; state: 'RUNNING' | 'WAITING' | 'DONE' };
 export type Attempt = { jobId: string; accountId: string; state: AttemptState; count: number; updatedAt: string; message?: string; code?: string };
-export type VaultData = { schemaVersion: 2; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; imageRetentionHours: number; appearance: 'system' | 'light' | 'dark' } };
-export const emptyVault = (): VaultData => ({ schemaVersion: 2, accounts: [], activityCache: [], jobs: [], attempts: [], settings: { favoriteLocations: [], imageRetentionHours: 24, appearance: 'system' } });
+export type VaultData = { schemaVersion: 2; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; reservedPhotos: ReservedPhoto[]; imageRetentionHours: number; appearance: 'system' | 'light' | 'dark' } };
+export const emptyVault = (): VaultData => ({ schemaVersion: 2, accounts: [], activityCache: [], jobs: [], attempts: [], settings: { favoriteLocations: [], reservedPhotos: [], imageRetentionHours: 24, appearance: 'system' } });
 
 export const apiErrorCodes = ['INVALID_INPUT', 'NETWORK_TIMEOUT', 'SESSION_EXPIRED', 'REAUTH_REQUIRED', 'ACTIVITY_NOT_FOUND', 'NOT_MEMBER', 'ALREADY_SIGNED', 'QR_EXPIRED', 'LOCATION_REJECTED', 'VALIDATION_FAILED', 'PROVIDER_CHANGED', 'UNSUPPORTED', 'RATE_LIMITED', 'UNKNOWN'] as const;
 export type ApiErrorCode = typeof apiErrorCodes[number];

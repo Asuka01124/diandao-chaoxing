@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { ActivityIndicator, Pressable } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { XStack, YStack, useTheme } from 'tamagui';
+import { Text, XStack, YStack, useTheme } from 'tamagui';
 import type { Account, Course } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { CourseCard } from '../../src/features/courses/course-card';
 import { useVault } from '../../src/state';
-import { AppScreen, EmptyState, FeedbackNotice, GroupedList, SectionTitle, type FeedbackTone } from '../../src/ui';
+import { AppScreen, EmptyState, FeedbackNotice, GroupedList, type FeedbackTone } from '../../src/ui';
 
 type CourseLayout = 'list' | 'grid';
 
@@ -50,7 +50,7 @@ export default function CoursesScreen() {
       const list = await api.courses(session);
       if (request === sequence.current) {
         setCourses(list);
-        setStatus({ tone: 'success', message: `${manual ? '刷新完成' : '读取完成'} · ${list.length} 门课程 · ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` });
+        setStatus({ tone: 'success', message: `刷新完成 · ${list.length} 门课程 · ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` });
       }
     } catch (e) { if (request === sequence.current) setStatus({ tone: 'error', message: `课程读取失败：${e instanceof Error ? e.message : '请稍后重试'}` }); }
     finally { if (request === sequence.current) setBusy(false); }
@@ -59,7 +59,7 @@ export default function CoursesScreen() {
   if (!data || !account) return null;
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
-    ? <YStack gap={11}>{courses.map(course => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} onPress={() => openCourse(course)} />)}</YStack>
+    ? <GroupedList><Text color="$muted" fontSize={14} marginLeft={18} marginTop={16} marginBottom={9}>我的课程</Text>{courses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} last={index === courses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
     : <YStack gap={12}>{Array.from({ length: Math.ceil(courses.length / 2) }, (_, index) => {
       const pair = courses.slice(index * 2, index * 2 + 2);
       return <XStack key={pair[0].id + '-' + pair[0].classId} gap={12}>
@@ -69,19 +69,18 @@ export default function CoursesScreen() {
     })}</YStack>;
   return <AppScreen title="我的课程" subtitle="选择一门课程，继续查看签到活动">
     <XStack alignItems="center" justifyContent="space-between">
-      <XStack backgroundColor="$panel" borderWidth={1} borderColor="$glassBorder" borderRadius={16} padding={3} gap={5}>
+      <XStack backgroundColor="$panel" borderRadius={18} padding={5} gap={5} shadowColor="#000000" shadowOpacity={0.05} shadowRadius={13} shadowOffset={{ width: 0, height: 4 }} elevation={2}>
         {(['list', 'grid'] as const).map(option => <Pressable key={option} accessibilityRole="button" accessibilityLabel={option === 'list' ? '列表显示课程' : '网格显示课程'} accessibilityState={{ selected: layout === option }}
-          onPress={() => setLayout(option)} style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: layout === option ? theme.soft.val : 'transparent', opacity: pressed ? 0.6 : 1 })}>
-          <LayoutIcon layout={option} color={layout === option ? theme.brand.val : theme.muted.val} />
+          onPress={() => setLayout(option)} style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: layout === option ? theme.soft.val : 'transparent', opacity: pressed ? 0.6 : 1 })}>
+          <LayoutIcon layout={option} color={layout === option ? theme.color.val : theme.muted.val} />
         </Pressable>)}
       </XStack>
       <Pressable accessibilityRole="button" accessibilityLabel={busy ? '正在刷新课程' : '刷新课程'} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void loadCourses(account, true); }}
-        style={({ pressed }) => ({ width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? theme.brand.val : theme.panel.val, borderWidth: 1, borderColor: theme.glassBorder.val, opacity: busy ? 0.65 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] })}>
-        {({ pressed }) => busy ? <ActivityIndicator size="small" color={theme.brand.val} /> : <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Path d="M20 11a8 8 0 1 1-2.5-5.8M20 4v6h-6" stroke={pressed ? theme.onAccent.val : theme.brand.val} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
+        style={({ pressed }) => ({ width: 52, height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.panel.val, opacity: busy ? 0.65 : pressed ? 0.6 : 1, shadowColor: '#000000', shadowOpacity: 0.05, shadowRadius: 13, shadowOffset: { width: 0, height: 4 }, elevation: 2 })}>
+        {busy ? <ActivityIndicator size="small" color={theme.brand.val} /> : <Svg width={23} height={23} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Path d="M20 11a8 8 0 1 1-2.5-5.8M20 4v6h-6" stroke={theme.muted.val} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
       </Pressable>
     </XStack>
-    {status && <YStack marginTop={12}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <SectionTitle>我的课程</SectionTitle>
-    {courses.length ? courseCards : <GroupedList><EmptyState title={busy ? '正在读取课程' : '暂无课程'} detail={busy ? '请稍候' : '点击上方刷新按钮重试'} /></GroupedList>}
+    {status && <YStack marginTop={13}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
+    <YStack marginTop={13}>{courses.length ? courseCards : <GroupedList><EmptyState title={busy ? '正在读取课程' : '暂无课程'} detail={busy ? '请稍候' : '点击上方刷新按钮重试'} /></GroupedList>}</YStack>
   </AppScreen>;
 }

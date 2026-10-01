@@ -13,7 +13,7 @@ export default function JobsScreen() {
     <HeroCard eyebrow="任务概览" title={`${data.jobs.length} 个任务，进度一目了然`} detail="结果按账号独立记录；未完成的任务可以继续处理。" />
     <XStack gap={11} marginTop={14}>
       {([{ label: '已完成', value: completed }, { label: '待处理', value: attention }] as const).map(item =>
-        <YStack key={item.label} flex={1} backgroundColor="$panel" borderWidth={1} borderColor="$glassBorder" borderRadius={20} padding={17} gap={4}>
+        <YStack key={item.label} flex={1} backgroundColor="$panel" borderRadius={20} padding={17} gap={4}>
           <Text color="$brand" fontSize={24} fontWeight="700">{item.value}</Text>
           <Text color="$muted" fontSize={12} fontWeight="600">{item.label}</Text>
         </YStack>)}

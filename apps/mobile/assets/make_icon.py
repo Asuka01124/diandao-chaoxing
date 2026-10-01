@@ -1,11 +1,11 @@
 """Render the app icon at 3x for clean rounded edges."""
 
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 S = 3
 SIZE = 1024 * S
-INK = '#3155D9'
+INK = '#4D4D4D'
 
 
 def px(value):
@@ -20,25 +20,11 @@ def line(draw, points, width=38):
         draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill=INK)
 
 
-base = Image.new('RGBA', (1024, 1024))
-bg = ImageDraw.Draw(base)
-for y in range(1024):
-    ratio = y / 1023
-    start = (247, 250, 255)
-    end = (200, 216, 249)
-    color = tuple(round(a * (1-ratio) + b * ratio) for a, b in zip(start, end)) + (255,)
-    bg.line((0, y, 1024, y), fill=color)
-image = base.resize((SIZE, SIZE), Image.Resampling.BICUBIC)
-
-glow = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))
-glow_draw = ImageDraw.Draw(glow)
-glow_draw.ellipse((px(500), px(-115), px(1120), px(505)), fill=(141, 169, 255, 95))
-glow_draw.ellipse((px(-150), px(620), px(430), px(1200)), fill=(141, 169, 255, 64))
-image = Image.alpha_composite(image, glow.filter(ImageFilter.GaussianBlur(px(65))))
+image = Image.new('RGBA', (SIZE, SIZE), '#F7F7F7')
 
 plate = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))
 plate_draw = ImageDraw.Draw(plate)
-plate_draw.rounded_rectangle((px(145), px(147), px(879), px(877)), radius=px(186), fill=(255, 255, 255, 174), outline=(255, 255, 255, 232), width=px(5))
+plate_draw.rounded_rectangle((px(145), px(147), px(879), px(877)), radius=px(186), fill=(255, 255, 255, 255))
 image = Image.alpha_composite(image, plate)
 
 draw = ImageDraw.Draw(image)

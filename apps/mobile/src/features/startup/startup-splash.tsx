@@ -10,7 +10,7 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export function StartupSplash() {
   const dark = useColorScheme() === 'dark';
-  const ink = dark ? '#A5B8FF' : '#3155D9';
+  const ink = dark ? '#E1E1E1' : '#4D4D4D';
   const { ready } = useVault();
   const [visible, setVisible] = useState(true);
   const [finished, setFinished] = useState(false);
@@ -67,9 +67,7 @@ export function StartupSplash() {
     }}
     importantForAccessibility="no-hide-descendants"
     pointerEvents="none"
-    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: dark ? '#090F20' : '#EDF2FB', opacity: overlay, alignItems: 'center', justifyContent: 'center' }}>
-    <View style={{ position: 'absolute', width: 330, height: 330, borderRadius: 165, top: '9%', right: -140, backgroundColor: dark ? '#253B703F' : '#B9CBFF75' }} />
-    <View style={{ position: 'absolute', width: 270, height: 270, borderRadius: 135, bottom: '11%', left: -135, backgroundColor: dark ? '#352B6440' : '#D7CCFF78' }} />
+    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: dark ? '#111111' : '#F7F7F7', opacity: overlay, alignItems: 'center', justifyContent: 'center' }}>
     <View style={{ width: 224, height: 224 }}>
       <Svg width="100%" height="100%" viewBox="0 0 1024 1024" fill="none">
         <AnimatedRect x={205} y={238} width={614} height={584} rx={116} stroke={ink} strokeWidth={38} strokeDasharray={[2400]} strokeDashoffset={reveal(2400)} />
@@ -80,6 +78,6 @@ export function StartupSplash() {
         {[355, 512, 669].map((cx, index) => <AnimatedCircle key={cx} cx={cx} cy={753} r={16} fill={ink} opacity={dots[index]} />)}
       </Svg>
     </View>
-    <Animated.Text style={{ marginTop: 22, color: ink, fontSize: 27, fontWeight: '700', letterSpacing: 2, opacity: title }}>点卯侠</Animated.Text>
+    <Animated.Text style={{ marginTop: 22, color: ink, fontSize: 27, fontWeight: '700', letterSpacing: 2, opacity: title }}>到点</Animated.Text>
   </Animated.View>;
 }

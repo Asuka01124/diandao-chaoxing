@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { emptyVault, type VaultData } from '@sign/shared';
 import { clearVault, readVault, writeVault } from './core/vault';
-import { clearAllStagedPhotos } from './core/media';
+import { clearAllReservedPhotos, clearAllStagedPhotos } from './core/media';
 import { cleanupCompletedPhoto, type VaultAccess } from './core/jobs';
 
 type State = VaultAccess & { data: VaultData | null; ready: boolean; error: string | null; reload: () => Promise<void>; clear: () => Promise<void> };
@@ -40,7 +40,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     const timer = setInterval(clean, 15 * 60_000);
     return () => clearInterval(timer);
   }, [data !== null, data?.settings.imageRetentionHours, update]);
-  const clear = useCallback(async () => { await chain.current; await clearVault(); try { clearAllStagedPhotos(); } catch {} const next = emptyVault(); current.current = next; setData(next); }, []);
+  const clear = useCallback(async () => { await chain.current; await clearVault(); try { clearAllStagedPhotos(); } catch {} try { clearAllReservedPhotos(); } catch {} const next = emptyVault(); current.current = next; setData(next); }, []);
   return <context.Provider value={{ data, ready, error, reload, clear, get: () => { if (!current.current) throw new Error('本地资料尚未读取'); return current.current; }, update }}>{children}</context.Provider>;
 }
 export function useVault(): State { const value = useContext(context); if (!value) throw new Error('缺少 VaultProvider'); return value; }

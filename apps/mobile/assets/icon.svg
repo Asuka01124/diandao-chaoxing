@@ -1,24 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#F7FAFF"/>
-      <stop offset="1" stop-color="#C8D8F9"/>
-    </linearGradient>
-    <radialGradient id="glow">
-      <stop offset="0" stop-color="#8DA9FF" stop-opacity=".7"/>
-      <stop offset="1" stop-color="#8DA9FF" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect width="1024" height="1024" fill="url(#background)"/>
-  <circle cx="810" cy="208" r="325" fill="url(#glow)"/>
-  <circle cx="145" cy="890" r="290" fill="url(#glow)" opacity=".4"/>
-  <rect x="145" y="147" width="734" height="730" rx="186" fill="#fff" fill-opacity=".7" stroke="#fff" stroke-opacity=".9" stroke-width="5"/>
-  <g fill="none" stroke="#3155D9" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="1024" height="1024" fill="#F7F7F7"/>
+  <rect x="145" y="147" width="734" height="730" rx="186" fill="#fff"/>
+  <g fill="none" stroke="#4D4D4D" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
     <rect x="234" y="267" width="556" height="515" rx="94"/>
     <path d="M234 391h556"/>
     <path d="M370 238v85M654 238v85"/>
     <circle cx="512" cy="569" r="126"/>
     <path d="m445 569 47 47 92-98"/>
   </g>
-  <g fill="#3155D9"><circle cx="383" cy="722" r="14"/><circle cx="512" cy="722" r="14"/><circle cx="641" cy="722" r="14"/></g>
+  <g fill="#4D4D4D"><circle cx="383" cy="722" r="14"/><circle cx="512" cy="722" r="14"/><circle cx="641" cy="722" r="14"/></g>
 </svg>

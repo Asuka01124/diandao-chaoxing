@@ -6,15 +6,17 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { api } from '../../src/core/api';
 import { checkChallenge, provideFaceAndResume, replacePhotoAndRetry, replaceQrAndResume, retryAttempt, runJob } from '../../src/core/jobs';
-import { clearStagedPhoto, stagePhoto } from '../../src/core/media';
+import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } from '../../src/core/media';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
+import { ReservedPhotoPicker } from '../../src/features/photos/reserved-photo-picker';
 import { AppScreen, FeedbackNotice, GroupedList, HeroCard, Message, PrimaryButton, SectionTitle, SettingsRow, StatusBadge, useFeedback } from '../../src/ui';
 
 export default function JobScreen() {
   const { id, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
   const [error, setError] = useState('');
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [reservedPickerAccountId, setReservedPickerAccountId] = useState<string | null>(null);
   const actionRunning = useRef(false);
   const notify = useFeedback();
   useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
@@ -57,7 +59,11 @@ export default function JobScreen() {
   async function providePhoto(accountId: string, camera: boolean) {
     const picked = camera ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.5 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 });
     if (picked.canceled) return false;
-    const staged = await stagePhoto(picked.assets[0].uri);
+    await retryWithPhoto(accountId, picked.assets[0].uri);
+    return true;
+  }
+  async function retryWithPhoto(accountId: string, sourceUri: string) {
+    const staged = await stagePhoto(sourceUri);
     try { await replacePhotoAndRetry(store, id, accountId, staged); return true; }
     catch (error) { if (store.get().jobs.find(j => j.id === id)?.photoUri !== staged) clearStagedPhoto(staged); throw error; }
   }
@@ -70,6 +76,7 @@ export default function JobScreen() {
       return <YStack key={attempt.accountId}><SettingsRow title={account?.label ?? '已删除账号'} detail={`${attempt.message ?? ''}${attempt.count ? ` · 提交 ${attempt.count} 次` : ''}`} accessory={<StatusBadge state={attempt.state} />} />
         {(attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED') && <YStack padding={12}>{actionButton(`retry-${attempt.accountId}`, '核查后重试', '正在核查并重试…', () => retryAttempt(store, id, attempt.accountId), attempt.accountId)}</YStack>}
         {attempt.state === 'FAILED' && job.input.kind === 'photo' && <YStack padding={12} gap={8}>
+          {!!data.settings.reservedPhotos.length && <PrimaryButton disabled={!!activeAction} onPress={() => setReservedPickerAccountId(attempt.accountId)}>使用预留照片并重试</PrimaryButton>}
           {actionButton(`photo-camera-${attempt.accountId}`, '拍摄新照片并重试', '正在处理照片…', () => providePhoto(attempt.accountId, true), attempt.accountId)}
           {actionButton(`photo-library-${attempt.accountId}`, '选择新照片并重试', '正在处理照片…', () => providePhoto(attempt.accountId, false), attempt.accountId)}
         </YStack>}
@@ -83,5 +90,12 @@ export default function JobScreen() {
     {attempts.some(a => a.state === 'WAITING_QR') && <YStack marginTop={20}><PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: job.activity.id, jobId: job.id } })}>扫描新二维码并继续</PrimaryButton></YStack>}
     {attempts.some(a => a.state === 'WAITING_CAPTCHA' || a.state === 'WAITING_FACE') && <Message>第三方要求人工验证。可以在此提供该账号授权的人脸照片，或在官方客户端完成验证后核查状态。</Message>}
     {job.state === 'RUNNING' && <YStack marginTop={20}>{actionButton('continue', '继续未完成账号', '正在继续执行任务…', () => runJob(store, job.id))}</YStack>}
+    <ReservedPhotoPicker visible={!!reservedPickerAccountId} photos={data.settings.reservedPhotos} onClose={() => setReservedPickerAccountId(null)} onPick={photo => {
+      if (!reservedPickerAccountId) return;
+      if (!reservedPhotoExists(photo.id)) { notify('这张预留照片已丢失，请在设置中删除后重新添加', 'error'); return; }
+      const accountId = reservedPickerAccountId;
+      setReservedPickerAccountId(null);
+      void runAction(`photo-reserved-${accountId}`, '正在处理预留照片…', () => retryWithPhoto(accountId, reservedPhotoUri(photo.id)), accountId);
+    }} />
   </AppScreen>;
 }

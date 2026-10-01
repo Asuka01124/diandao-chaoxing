@@ -31,6 +31,7 @@ export class EncryptedVault {
       const data = JSON.parse(new TextDecoder().decode(plain)) as Omit<VaultData, 'schemaVersion'> & { schemaVersion: 1 | 2; settings: VaultData['settings'] & { apiUrl?: string } };
       if (![1, 2].includes(data.schemaVersion) || !Array.isArray(data.accounts) || !Array.isArray(data.jobs) || !Array.isArray(data.attempts)) throw new Error('版本不受支持');
       delete data.settings.apiUrl;
+      if (!Array.isArray(data.settings.reservedPhotos)) data.settings.reservedPhotos = [];
       if (data.schemaVersion === 1) {
         // 旧版没有账号角色；首次登录保存的账号位于第一位。
         data.accounts = data.accounts.map((account, index) => ({ ...account, role: index === 0 ? 'primary' : 'delegate' }));

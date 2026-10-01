@@ -63,6 +63,18 @@ test('旧版保存的网关地址在读取时移除', async () => {
   expect(await vault.read()).not.toHaveProperty('settings.apiUrl');
 });
 
+test('旧版本机资料缺少预留照片列表时自动补齐', async () => {
+  const vault = new EncryptedVault(ports);
+  const data = emptyVault();
+  delete (data.settings as Partial<typeof data.settings>).reservedPhotos;
+  await vault.write(data);
+  const loaded = await vault.read();
+  expect(loaded.settings.reservedPhotos).toEqual([]);
+  loaded.settings.reservedPhotos.push({ id: 'photo-1', createdAt: '2026-10-02T00:00:00.000Z' });
+  await vault.write(loaded);
+  expect((await vault.read()).settings.reservedPhotos).toHaveLength(1);
+});
+
 test('只剩备份文件时替换中断仍可恢复原资料', async () => {
   const vault = new EncryptedVault(ports); const first = emptyVault(); first.accounts = [account('alice')]; await vault.write(first);
   files.set('vault.bin.bak', files.get('vault.bin')!); files.delete('vault.bin');
