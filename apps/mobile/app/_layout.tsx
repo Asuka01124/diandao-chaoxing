@@ -1,4 +1,5 @@
 import { useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -19,5 +20,5 @@ function ThemedNavigator() {
 
 export default function RootLayout() {
   const scheme = useColorScheme();
-  return <TamaguiProvider config={config} defaultTheme={scheme === 'dark' ? 'dark' : 'light'}><VaultProvider><ThemedNavigator /><StartupSplash /></VaultProvider></TamaguiProvider>;
+  return <GestureHandlerRootView style={{ flex: 1 }}><TamaguiProvider config={config} defaultTheme={scheme === 'dark' ? 'dark' : 'light'}><VaultProvider><ThemedNavigator /><StartupSplash /></VaultProvider></TamaguiProvider></GestureHandlerRootView>;
 }

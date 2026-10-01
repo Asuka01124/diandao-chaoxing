@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "点卯侠", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "0.5.3", "icon": "./assets/icon.png",
+    "name": "点卯侠", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "0.5.4", "icon": "./assets/icon.png",
     "orientation": "portrait", "userInterfaceStyle": "automatic", "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "dev.local.sign.tool" },
-    "android": { "package": "dev.local.sign.tool", "versionCode": 9, "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" } },
+    "android": { "package": "dev.local.sign.tool", "versionCode": 10, "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" } },
     "plugins": ["expo-router", "expo-secure-store", ["expo-splash-screen", { "backgroundColor": "#ffffff", "image": "./assets/icon.png", "imageWidth": 160 }], ["expo-camera", { "cameraPermission": "用于扫描签到二维码", "recordAudioAndroid": false }], ["expo-image-picker", { "photosPermission": "用于选择签到照片", "cameraPermission": "用于拍摄签到照片" }]],
     "experiments": { "typedRoutes": true }
   }
