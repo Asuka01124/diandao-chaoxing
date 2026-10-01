@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Platform, Pressable, View } from 'react-native';
 import Constants from 'expo-constants';
 import { ExpoGaodeMapModule, MapView, Marker, reGeocode, type MapViewRef } from 'expo-gaode-map';
-import { Button, Input, Text, XStack, YStack } from 'tamagui';
+import { Button, Text, XStack, YStack } from 'tamagui';
 import { locationSchema, type LocationInput } from '@sign/shared';
-import { FeedbackNotice, PrimaryButton, type FeedbackTone } from '../../ui';
+import { FeedbackNotice, GlassInput, PrimaryButton, type FeedbackTone } from '../../ui';
 
 const DEFAULT_CENTER = { latitude: 39.9093, longitude: 116.3974 };
 const PRIVACY_VERSION = '2026-10-01';
@@ -71,8 +71,8 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
 
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
     <YStack flex={1} backgroundColor="$background" paddingTop={32}>
-      <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={20} paddingBottom={12}>
-        <Pressable onPress={onClose} accessibilityRole="button" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1, padding: 6 })}><Text color="$brand" fontSize={16}>取消</Text></Pressable>
+      <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={20} paddingBottom={16}>
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="取消选择位置" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' })}><Text color="$brand" fontSize={16}>取消</Text></Pressable>
         <Text color="$color" fontSize={18} fontWeight="700">选择位置</Text>
         <View style={{ width: 32 }} />
       </XStack>
@@ -91,10 +91,10 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
             {point && <Marker position={point} pinColor="red" />}
           </MapView>
         </View>
-        <YStack padding={20} paddingBottom={30} gap={12} backgroundColor="$panel" borderTopWidth={1} borderColor="$separator">
+        <YStack padding={20} paddingBottom={30} gap={12} backgroundColor="$panel" borderTopWidth={1} borderColor="$glassBorder" borderTopLeftRadius={25} borderTopRightRadius={25}>
           <FeedbackNotice message={message} tone={messageTone} />
-          <Input placeholder="位置名称或详细地址" value={address} onChangeText={setAddress} />
-          <Button onPress={() => { void useCurrentLocation(); }} disabled={locating} opacity={locating ? 0.6 : 1} pressStyle={{ opacity: 0.7, scale: 0.98 }} backgroundColor="$soft" color="$color" minHeight={48} accessibilityState={{ busy: locating, disabled: locating }}>{locating && <ActivityIndicator size="small" />}{locating ? '正在定位…' : '使用当前位置'}</Button>
+          <GlassInput placeholder="位置名称或详细地址" value={address} onChangeText={setAddress} accessibilityLabel="位置名称或详细地址" />
+          <Button onPress={() => { void useCurrentLocation(); }} disabled={locating} opacity={locating ? 0.6 : 1} pressStyle={{ opacity: 0.7, scale: 0.98 }} backgroundColor="$soft" color="$color" borderWidth={1} borderColor="$glassBorder" borderRadius={16} minHeight={48} accessibilityState={{ busy: locating, disabled: locating }}>{locating && <ActivityIndicator size="small" />}{locating ? '正在定位…' : '使用当前位置'}</Button>
           <PrimaryButton onPress={confirm}>使用此位置</PrimaryButton>
           <Text color="$muted" fontSize={11} textAlign="center">地图服务由高德开放平台提供</Text>
         </YStack>

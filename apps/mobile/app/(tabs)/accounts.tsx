@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { Input, Text, YStack } from 'tamagui';
+import { Text, YStack } from 'tamagui';
 import type { Account } from '@sign/shared';
 import { ClientError } from '../../src/core/api';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { removeAccount, saveLogin, verifyAccount } from '../../src/features/accounts/account-service';
-import { ActionSheet, AppScreen, EmptyState, FeedbackNotice, GroupedList, PrimaryButton, SectionTitle, SettingsRow, useFeedback, type FeedbackTone } from '../../src/ui';
+import { ActionSheet, AppScreen, EmptyState, FeedbackNotice, GlassInput, GroupedList, HeroCard, PrimaryButton, SectionTitle, SettingsRow, useFeedback, type FeedbackTone } from '../../src/ui';
 
 export default function AccountsScreen() {
   const store = useVault(); const data = store.data;
@@ -57,14 +57,18 @@ export default function AccountsScreen() {
     symbol="代" onPress={() => setSelected(account.id)}
     accessory={<Text color="$brand" fontSize={13} fontWeight="600">管理 ›</Text>} />;
   return <AppScreen title="代签账号" subtitle="添加和管理同学的账号">
+    <HeroCard eyebrow="账号空间" title={`${delegates.length} 个代签账号`} detail="各账号的登录状态和签到结果彼此独立。" />
     <SectionTitle>代签账号</SectionTitle><GroupedList>{delegates.length ? delegates.map(accountRow) : <EmptyState title="还没有代签账号" detail="在下方添加同学的账号" />}</GroupedList>
     {!!feedback && <YStack marginTop={14}><FeedbackNotice message={feedback} tone={feedbackTone} /></YStack>}
     {!!error && <YStack marginTop={14}><FeedbackNotice message={error} tone="error" /></YStack>}
     <SectionTitle>{reauthId ? '重新登录账号' : '添加代签账号'}</SectionTitle>
-    <YStack backgroundColor="$panel" borderRadius="$panel" padding={16} gap={12} borderWidth={1} borderColor="$separator">
-      <Input placeholder="显示名称（可选）" value={label} onChangeText={setLabel} accessibilityLabel="显示名称" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={46} />
-      <Input placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" accessibilityLabel="账号" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={46} />
-      <Input placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="密码" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={46} />
+    <YStack backgroundColor="$panel" borderRadius="$panel" padding={18} gap={12} borderWidth={1} borderColor="$glassBorder">
+      <Text color="$muted" fontSize={12} fontWeight="600">显示名称</Text>
+      <GlassInput placeholder="显示名称（可选）" value={label} onChangeText={setLabel} accessibilityLabel="显示名称" />
+      <Text color="$muted" fontSize={12} fontWeight="600">学习通账号</Text>
+      <GlassInput placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" accessibilityLabel="账号" />
+      <Text color="$muted" fontSize={12} fontWeight="600">密码</Text>
+      <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="密码" />
       <PrimaryButton loading={busy} disabled={!!checkingId} onPress={() => { void add(); }}>{reauthId ? '重新登录' : '添加代签账号'}</PrimaryButton>
     </YStack>
     <ActionSheet visible={!!target} title={target?.label ?? ''} onClose={() => setSelected(null)} actions={target ? [

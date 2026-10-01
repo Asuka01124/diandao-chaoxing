@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Input, YStack } from 'tamagui';
+import { Text, YStack } from 'tamagui';
 import { useVault } from '../src/state';
 import { cleanupCompletedPhoto, runJob } from '../src/core/jobs';
 import { saveLogin } from '../src/features/accounts/account-service';
 import { hasPrimaryAccount } from '../src/features/accounts/account-role';
-import { AppScreen, FeedbackNotice, HeroCard, Message, PrimaryButton, useFeedback } from '../src/ui';
+import { AppScreen, FeedbackNotice, GlassInput, HeroCard, PrimaryButton, useFeedback } from '../src/ui';
 
 export default function LoginScreen() {
   const store = useVault();
@@ -44,11 +44,13 @@ export default function LoginScreen() {
     catch (e) { const message = e instanceof Error ? e.message : '登录失败'; setError(message); notify(message, 'error'); }
     finally { setBusy(false); }
   }
-  return <AppScreen title="登录学习通" subtitle="使用学习通账号进入课程首页">
-    <HeroCard eyebrow="欢迎使用" title="课程与签到" detail="首次登录后即可查看课程。账号资料加密保存在这台设备。" />
-    <YStack backgroundColor="$panel" borderRadius="$panel" padding={18} marginTop={24} gap={14}>
-      <Input placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={50} />
-      <Input placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={50} />
+  return <AppScreen title="欢迎回来" subtitle="登录学习通，查看你的课程与签到">
+    <HeroCard eyebrow="专注每一次签到" title="课程与任务，尽在掌握" detail="账号资料加密保存在这台设备，登录后即可开始。" />
+    <YStack backgroundColor="$panel" borderWidth={1} borderColor="$glassBorder" borderRadius="$panel" padding={20} marginTop={22} gap={14}>
+      <Text color="$muted" fontSize={12} fontWeight="600">学习通账号</Text>
+      <GlassInput placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" />
+      <Text color="$muted" fontSize={12} fontWeight="600">密码</Text>
+      <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" />
       <PrimaryButton loading={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录并进入课程'}</PrimaryButton>
     </YStack>
     {!!error && <YStack marginTop={14}><FeedbackNotice message={error} tone="error" /></YStack>}

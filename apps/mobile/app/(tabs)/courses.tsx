@@ -59,7 +59,7 @@ export default function CoursesScreen() {
   if (!data || !account) return null;
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
-    ? <GroupedList>{courses.map(course => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} onPress={() => openCourse(course)} />)}</GroupedList>
+    ? <YStack gap={11}>{courses.map(course => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} onPress={() => openCourse(course)} />)}</YStack>
     : <YStack gap={12}>{Array.from({ length: Math.ceil(courses.length / 2) }, (_, index) => {
       const pair = courses.slice(index * 2, index * 2 + 2);
       return <XStack key={pair[0].id + '-' + pair[0].classId} gap={12}>
@@ -67,16 +67,16 @@ export default function CoursesScreen() {
         {pair.length === 1 && <YStack flex={1} />}
       </XStack>;
     })}</YStack>;
-  return <AppScreen title="课程" subtitle="选择课程，查看签到">
+  return <AppScreen title="我的课程" subtitle="选择一门课程，继续查看签到活动">
     <XStack alignItems="center" justifyContent="space-between">
-      <XStack backgroundColor="$soft" borderRadius={14} padding={3} gap={8}>
+      <XStack backgroundColor="$panel" borderWidth={1} borderColor="$glassBorder" borderRadius={16} padding={3} gap={5}>
         {(['list', 'grid'] as const).map(option => <Pressable key={option} accessibilityRole="button" accessibilityLabel={option === 'list' ? '列表显示课程' : '网格显示课程'} accessibilityState={{ selected: layout === option }}
-          onPress={() => setLayout(option)} style={({ pressed }) => ({ width: 46, height: 44, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: layout === option ? theme.panel.val : 'transparent', opacity: pressed ? 0.6 : 1 })}>
+          onPress={() => setLayout(option)} style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: layout === option ? theme.soft.val : 'transparent', opacity: pressed ? 0.6 : 1 })}>
           <LayoutIcon layout={option} color={layout === option ? theme.brand.val : theme.muted.val} />
         </Pressable>)}
       </XStack>
       <Pressable accessibilityRole="button" accessibilityLabel={busy ? '正在刷新课程' : '刷新课程'} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void loadCourses(account, true); }}
-        style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? theme.brand.val : theme.soft.val, borderWidth: 1.5, borderColor: theme.brand.val, opacity: busy ? 0.65 : 1, transform: [{ scale: pressed ? 0.92 : 1 }] })}>
+        style={({ pressed }) => ({ width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? theme.brand.val : theme.panel.val, borderWidth: 1, borderColor: theme.glassBorder.val, opacity: busy ? 0.65 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] })}>
         {({ pressed }) => busy ? <ActivityIndicator size="small" color={theme.brand.val} /> : <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Path d="M20 11a8 8 0 1 1-2.5-5.8M20 4v6h-6" stroke={pressed ? theme.onAccent.val : theme.brand.val} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
       </Pressable>
     </XStack>

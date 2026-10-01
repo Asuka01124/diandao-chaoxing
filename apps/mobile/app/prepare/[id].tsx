@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Input, Text, YStack } from 'tamagui';
+import { Text, YStack } from 'tamagui';
 import * as ImagePicker from 'expo-image-picker';
 import type { LocationInput, SignInput } from '@sign/shared';
 import { createJob, runJob } from '../../src/core/jobs';
@@ -8,7 +8,7 @@ import { clearStagedPhoto, stagePhoto } from '../../src/core/media';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { MapPicker } from '../../src/features/location/map-picker';
-import { AppScreen, FeedbackNotice, GroupedList, Message, PrimaryButton, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
+import { AppScreen, FeedbackNotice, GlassInput, GroupedList, HeroCard, Message, PrimaryButton, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
 
 export default function PrepareScreen() {
   const { id, accountId, selectedIds, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; accountId?: string; selectedIds?: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
@@ -66,12 +66,13 @@ export default function PrepareScreen() {
     <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>为 {selected.length} 个账号签到</PrimaryButton>
   </YStack>}>
     {!!error && <FeedbackNotice message={error} tone="error" />}
+    <HeroCard eyebrow="签到准备" title={`${selected.length} 个账号已选择`} detail="确认参与账号，再补充本次签到要求的信息。" />
     <SectionTitle>选择账号</SectionTitle><GroupedList>{data.accounts.map(a => <SettingsRow key={a.id} title={a.label} detail={a.role === 'primary' ? '我的账号' : undefined} onPress={() => setSelected(ids => ids.includes(a.id) ? ids.filter(id => id !== a.id) : [...ids, a.id])} accessory={<Text color="$brand" fontSize={20}>{selected.includes(a.id) ? '✓' : '○'}</Text>} />)}</GroupedList>
     {needsLocation && <><SectionTitle>签到位置</SectionTitle><GroupedList><SettingsRow title={location?.address ?? '尚未选择位置'} detail={location ? '点击可在地图上重新选点' : '点击打开地图，选择签到地点'} symbol="⌖" onPress={() => setMapOpen(true)} /></GroupedList></>}
     {needsLocation && !!data.settings.favoriteLocations.length && <><SectionTitle>收藏位置</SectionTitle><GroupedList>{data.settings.favoriteLocations.map((item, index) => <SettingsRow key={index} title={item.address} detail="点击使用此位置" selected={location?.latitude === item.latitude && location?.longitude === item.longitude} onPress={() => { setLocation(item); notify('已选用收藏位置', 'success'); }} />)}</GroupedList></>}
     <MapPicker visible={mapOpen} initial={location} onClose={() => setMapOpen(false)} onPick={point => { setLocation(point); notify('签到位置已选择', 'success'); }} />
-    {activity.kind === 'code' && <><SectionTitle>签到码</SectionTitle><Input placeholder="请输入数字签到码" value={code} onChangeText={setCode} keyboardType="number-pad" /></>}
-    {activity.kind === 'gesture' && <><SectionTitle>手势顺序</SectionTitle><Input placeholder="按 1–9 顺序输入不重复数字" value={gesture} onChangeText={setGesture} keyboardType="number-pad" /></>}
+    {activity.kind === 'code' && <><SectionTitle>签到码</SectionTitle><GlassInput placeholder="请输入数字签到码" value={code} onChangeText={setCode} keyboardType="number-pad" /></>}
+    {activity.kind === 'gesture' && <><SectionTitle>手势顺序</SectionTitle><GlassInput placeholder="按 1–9 顺序输入不重复数字" value={gesture} onChangeText={setGesture} keyboardType="number-pad" /></>}
     {activity.kind === 'qr' && <><SectionTitle>二维码</SectionTitle><YStack gap={10}><Message>{scannedAt && qr === qrPayload ? `已于 ${new Date(scannedAt).toLocaleTimeString()} 扫描` : '请扫描当前活动的二维码'}</Message><PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } })}>打开扫码</PrimaryButton></YStack></>}
     {activity.kind === 'photo' && <><SectionTitle>签到照片</SectionTitle><YStack gap={10}><Message>{photoUri ? '已选择照片，确认后将按账号分别上传' : '请选择或拍摄签到照片'}</Message><PrimaryButton onPress={() => { void pickPhoto(false).catch(e => { const message = e instanceof Error ? e.message : '选图失败'; setError(message); notify(message, 'error'); }); }}>从相册选择</PrimaryButton><PrimaryButton onPress={() => { void pickPhoto(true).catch(e => { const message = e instanceof Error ? e.message : '拍摄失败'; setError(message); notify(message, 'error'); }); }}>拍摄照片</PrimaryButton></YStack></>}
   </AppScreen>;

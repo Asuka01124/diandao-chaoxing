@@ -23,7 +23,7 @@ export default function ScanScreen() {
   }
   return <AppScreen title="扫描签到码">
     {!permission?.granted ? <YStack gap={14}><Message>扫描仅在前台进行，拍摄内容不会自动保存。</Message>{!!error && <FeedbackNotice message={error} tone="error" />}<PrimaryButton loading={requesting} onPress={() => { void enableCamera(); }}>{permission?.canAskAgain === false ? '打开系统设置' : '允许相机'}</PrimaryButton></YStack> :
-      <YStack height={430} borderRadius="$panel" overflow="hidden"><CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={({ data }) => {
+      <YStack height={430} borderRadius={25} borderWidth={1} borderColor="$glassBorder" overflow="hidden"><CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={({ data }) => {
         if (locked) return; setLocked(true);
         notify('二维码已扫描，正在返回任务', 'success');
         const scannedAt = new Date().toISOString();

@@ -11,9 +11,9 @@ const FeedbackContext = createContext<Notify>(() => {});
 export function FeedbackNotice({ message, tone = 'info' }: { message: string; tone?: FeedbackTone }) {
   const theme = useTheme();
   const accent = tone === 'error' ? theme.danger.val : tone === 'success' ? theme.success.val : theme.brand.val;
-  return <XStack minHeight={46} alignItems="center" gap={10} paddingHorizontal={14} paddingVertical={10} backgroundColor="$panel" borderWidth={1} borderColor="$separator" borderRadius={14}
+  return <XStack minHeight={50} alignItems="center" gap={11} paddingHorizontal={16} paddingVertical={12} backgroundColor="$panel" borderWidth={1} borderColor="$glassBorder" borderRadius={17}
     accessibilityRole={tone === 'error' ? 'alert' : undefined} accessibilityLiveRegion="polite">
-    {tone === 'loading' ? <ActivityIndicator size="small" color={accent} /> : <Text width={19} color={tone === 'error' ? '$danger' : tone === 'success' ? '$success' : '$brand'} fontSize={18} fontWeight="700" textAlign="center">{tone === 'error' ? '!' : tone === 'success' ? '✓' : '•'}</Text>}
+    {tone === 'loading' ? <ActivityIndicator size="small" color={accent} /> : <Text width={22} color={tone === 'error' ? '$danger' : tone === 'success' ? '$success' : '$brand'} fontSize={18} fontWeight="700" textAlign="center">{tone === 'error' ? '!' : tone === 'success' ? '✓' : '•'}</Text>}
     <Text flex={1} color="$color" fontSize={14} lineHeight={20}>{message}</Text>
   </XStack>;
 }
