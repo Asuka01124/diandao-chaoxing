@@ -1,136 +1,327 @@
-import { validateActivityInput, type Activity, type LocationInput, type ProviderSession, type SignInput, type SignStatus } from '@sign/shared';
+import {
+  validateActivityInput,
+  type Activity,
+  type LocationInput,
+  type ProviderSession,
+  type SignInput,
+  type SignStatus,
+} from '@sign/shared';
 import { activityDetail } from './activities';
 import { ProviderError } from './errors';
 import { json } from './response';
 import { allowedHost, RequestSession, type Transport } from './session';
 
-export function parseStatusPage(body: string): SignStatus {
-  if (body.includes('校验失败，未查询到活动数据')) throw new ProviderError('NOT_MEMBER', '该账号不在活动班级');
-  if (body.includes('下次早点哦')) return { state: 'EXPIRED' };
-  const match = body.match(/"primaryAttend"\s*:\s*\{[^{}]*?"status"\s*:\s*(\d+)/) ?? body.match(/signstatus\s*=\s*(\d+)/);
-  if (!match) throw new ProviderError('PROVIDER_CHANGED', '无法确认远端签到状态');
-  return { state: [1, 2, 3, 9].includes(Number(match[1])) ? 'SIGNED' : 'READY' };
+const apiRoot = 'https://mobilelearn.chaoxing.com';
+const confirmedStatuses = new Set([1, 2, 3, 9]);
+
+function apiUrl(path: string, query?: Record<string, string>): URL {
+  const url = new URL(path, apiRoot);
+  if (query) url.search = new URLSearchParams(query).toString();
+  return url;
 }
-async function presign(jar: RequestSession, session: ProviderSession, activity: Activity): Promise<SignStatus> {
-  const url = new URL('https://mobilelearn.chaoxing.com/newsign/preSign');
-  url.search = new URLSearchParams({ courseId: activity.courseId, classId: activity.classId, activePrimaryId: activity.id, general: '1', sys: '1', ls: '1', appType: '15', uid: session.userId, isTeacherViewOpen: '0' }).toString();
-  const body = await (await jar.request(url.toString(), { method: 'POST', body: new URLSearchParams({ ext: activity.ext }), headers: { 'content-type': 'application/x-www-form-urlencoded' } })).text();
-  return parseStatusPage(body);
+
+export function parseStatusPage(page: string): SignStatus {
+  if (page.includes('校验失败，未查询到活动数据')) {
+    throw new ProviderError('NOT_MEMBER', '该账号不在活动班级');
+  }
+  if (page.includes('下次早点哦')) return { state: 'EXPIRED' };
+
+  const attendance = page.match(/"primaryAttend"\s*:\s*(\{[^{}]*\})/);
+  let status: number | undefined;
+  if (attendance) {
+    try {
+      const record: unknown = JSON.parse(attendance[1]);
+      if (record && typeof record === 'object' && 'status' in record) {
+        status = Number(record.status);
+      }
+    } catch {
+      // Some responses contain a partial script; the simple status marker is still usable.
+    }
+  }
+  if (!Number.isInteger(status)) {
+    const marker = page.match(/\bsignstatus\s*=\s*(\d+)/i);
+    status = marker ? Number(marker[1]) : undefined;
+  }
+  if (!Number.isInteger(status)) {
+    throw new ProviderError('PROVIDER_CHANGED', '无法确认远端签到状态');
+  }
+  return { state: confirmedStatuses.has(status!) ? 'SIGNED' : 'READY' };
 }
-async function analysis(jar: RequestSession, activity: Activity): Promise<void> {
-  const first = new URL('https://mobilelearn.chaoxing.com/pptSign/analysis');
-  first.search = new URLSearchParams({ vs: '1', DB_STRATEGY: 'RANDOM', aid: activity.id }).toString();
-  const html = await (await jar.request(first.toString())).text();
-  const code = html.match(/code='\+'([a-f0-9]+)'/)?.[1];
-  if (!code) throw new ProviderError('PROVIDER_CHANGED', '第三方预签到确认参数已变化');
-  const second = new URL('https://mobilelearn.chaoxing.com/pptSign/analysis2');
-  second.search = new URLSearchParams({ DB_STRATEGY: 'RANDOM', code }).toString();
-  await jar.request(second.toString());
+
+async function readStatus(
+  client: RequestSession,
+  account: ProviderSession,
+  activity: Activity,
+): Promise<SignStatus> {
+  const url = apiUrl('/newsign/preSign', {
+    courseId: activity.courseId,
+    classId: activity.classId,
+    activePrimaryId: activity.id,
+    general: '1',
+    sys: '1',
+    ls: '1',
+    appType: '15',
+    uid: account.userId,
+    isTeacherViewOpen: '0',
+  });
+  const response = await client.request(url.href, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ ext: activity.ext }),
+  });
+  return parseStatusPage(await response.text());
 }
-export async function signStatus(session: ProviderSession, activity: Activity, transport?: Transport): Promise<SignStatus> {
-  return presign(new RequestSession(session, transport), session, activity);
+
+async function establishSignContext(client: RequestSession, activityId: string): Promise<void> {
+  const first = apiUrl('/pptSign/analysis', {
+    vs: '1',
+    DB_STRATEGY: 'RANDOM',
+    aid: activityId,
+  });
+  const page = await (await client.request(first.href)).text();
+  const token = page.split("code='+'", 2)[1]?.split("'", 1)[0];
+  if (!token || !/^[a-f0-9]+$/i.test(token)) {
+    throw new ProviderError('PROVIDER_CHANGED', '第三方预签到确认参数已变化');
+  }
+  await client.request(apiUrl('/pptSign/analysis2', {
+    DB_STRATEGY: 'RANDOM',
+    code: token,
+  }).href);
 }
-export async function preflight(session: ProviderSession, activity: Activity, transport?: Transport): Promise<SignStatus> {
-  const detail = await activityDetail(session, activity, transport);
-  const jar = new RequestSession(session, transport);
-  const status = await presign(jar, session, detail);
+
+export function signStatus(
+  account: ProviderSession,
+  activity: Activity,
+  transport?: Transport,
+): Promise<SignStatus> {
+  return readStatus(new RequestSession(account, transport), account, activity);
+}
+
+export async function preflight(
+  account: ProviderSession,
+  activity: Activity,
+  transport?: Transport,
+): Promise<SignStatus> {
+  const current = await activityDetail(account, activity, transport);
+  const client = new RequestSession(account, transport);
+  const status = await readStatus(client, account, current);
   if (status.state !== 'READY') return status;
-  if (detail.requirements?.captcha) return { state: 'WAITING_CAPTCHA', message: '需要人工完成验证码' };
-  if (detail.requirements?.face) return { state: 'WAITING_FACE', message: '需要人脸验证' };
-  await analysis(jar, activity);
+  if (current.requirements?.captcha) {
+    return { state: 'WAITING_CAPTCHA', message: '需要人工完成验证码' };
+  }
+  if (current.requirements?.face) {
+    return { state: 'WAITING_FACE', message: '需要人脸验证' };
+  }
+  await establishSignContext(client, activity.id);
   return status;
 }
-export function parseSubmitResponse(body: string): SignStatus {
-  const value = body.trim();
-  if (value === 'success') return { state: 'READY', message: '第三方已接受提交，仍需核验' };
-  if (value === '您已签到过了') return { state: 'SIGNED' };
-  if (value === 'success2') return { state: 'EXPIRED' };
-  if (value === '签到失败，请重新扫描。') throw new ProviderError('QR_EXPIRED', '二维码已过期');
-  if (value.startsWith('validate')) return { state: 'WAITING_CAPTCHA' };
-  if (value.startsWith('checkFace_') || value.startsWith('[face]')) return { state: 'WAITING_FACE' };
-  if (value.startsWith('errorLocation')) throw new ProviderError('LOCATION_REJECTED', '位置不在允许范围');
+
+export function parseSubmitResponse(response: string): SignStatus {
+  const message = response.trim();
+  switch (message) {
+    case 'success':
+      return { state: 'READY', message: '第三方已接受提交，仍需核验' };
+    case '您已签到过了':
+      return { state: 'SIGNED' };
+    case 'success2':
+      return { state: 'EXPIRED' };
+    case '签到失败，请重新扫描。':
+      throw new ProviderError('QR_EXPIRED', '二维码已过期');
+  }
+  if (message.startsWith('validate')) return { state: 'WAITING_CAPTCHA' };
+  if (message.startsWith('checkFace_') || message.startsWith('[face]')) {
+    return { state: 'WAITING_FACE' };
+  }
+  if (message.startsWith('errorLocation')) {
+    throw new ProviderError('LOCATION_REJECTED', '位置不在允许范围');
+  }
   throw new ProviderError('PROVIDER_CHANGED', '第三方返回未知签到结果');
 }
-function locationParams(url: URL, location?: LocationInput) {
-  if (!location) { url.searchParams.set('latitude', '-1'); url.searchParams.set('longitude', '-1'); return; }
-  url.searchParams.set('latitude', location.latitude.toFixed(6)); url.searchParams.set('longitude', location.longitude.toFixed(6));
-  const value = JSON.stringify({ result: 1, latitude: Number(location.latitude.toFixed(6)), longitude: Number(location.longitude.toFixed(6)), address: location.address });
-  url.searchParams.set('location', value); url.searchParams.set('locationResult', value);
-}
+
 export function parseQrPayload(payload: string, expectedId: string): { enc: string; code?: string } {
-  let params: URLSearchParams;
-  if (payload.startsWith('SIGNIN:')) params = new URLSearchParams(payload.slice(7).split('-')[0]);
-  else {
-    const url = new URL(payload);
-    if (url.protocol !== 'https:' || !allowedHost(url.hostname)) throw new ProviderError('INVALID_INPUT', '二维码地址不可信');
-    params = url.searchParams;
+  let query: URLSearchParams;
+  if (payload.startsWith('SIGNIN:')) {
+    query = new URLSearchParams(payload.slice('SIGNIN:'.length).split('-', 1)[0]);
+  } else {
+    let url: URL;
+    try {
+      url = new URL(payload);
+    } catch {
+      throw new ProviderError('INVALID_INPUT', '二维码地址无效');
+    }
+    if (url.protocol !== 'https:' || !allowedHost(url.hostname)) {
+      throw new ProviderError('INVALID_INPUT', '二维码地址不可信');
+    }
+    query = url.searchParams;
   }
-  const id = params.get('id') ?? params.get('aid');
-  if (id !== expectedId) throw new ProviderError('INVALID_INPUT', '二维码与当前活动不匹配或缺少活动编号');
-  const enc = params.get('enc'); if (!enc) throw new ProviderError('INVALID_INPUT', '二维码缺少签到参数');
-  return { enc, code: params.get('c') ?? undefined };
+  if ((query.get('id') ?? query.get('aid')) !== expectedId) {
+    throw new ProviderError('INVALID_INPUT', '二维码与当前活动不匹配或缺少活动编号');
+  }
+  const enc = query.get('enc');
+  if (!enc) throw new ProviderError('INVALID_INPUT', '二维码缺少签到参数');
+  return { enc, code: query.get('c') ?? undefined };
 }
-async function verifyDynamicQr(jar: RequestSession, activityId: string, code?: string): Promise<void> {
+
+async function assertCurrentQr(client: RequestSession, activityId: string, code?: string): Promise<void> {
   if (!code) return;
-  const url = new URL('https://mobilelearn.chaoxing.com/newsign/signDetail');
-  url.search = new URLSearchParams({ activePrimaryId: activityId, type: '1', msg: code }).toString();
-  const result = await json(await jar.request(url.toString()));
-  if (result.isOver === undefined || typeof result.signCode !== 'string') throw new ProviderError('PROVIDER_CHANGED', '动态二维码校验结果格式已变化');
-  if (Number(result.isOver) === 1 || result.signCode !== code) throw new ProviderError('QR_EXPIRED', '动态二维码已过期，请重新扫描');
-}
-async function faceEnc(jar: RequestSession, activity: Activity, mediaId: string): Promise<string> {
-  const url = new URL('https://mobilelearn.chaoxing.com/pptSign/check-face-result');
-  url.search = new URLSearchParams({ DB_STRATEGY: 'PRIMARY_KEY', STRATEGY_PARA: 'activeId', activeId: activity.id,
-    faceResult: JSON.stringify({ currentFaceId: mediaId, LiveDetectionStatus: 1, collectStatus: 1, cxtime: String(Date.now()) }) }).toString();
-  const result = await json(await jar.request(url.toString()));
-  if (typeof result.enc !== 'string' || !result.enc) throw new ProviderError('VALIDATION_FAILED', typeof result.msg === 'string' ? result.msg.slice(0, 160) : '第三方人脸校验未通过');
-  return result.enc;
-}
-export async function submit(session: ProviderSession, activity: Activity, input: SignInput, transport?: Transport, faceMediaId?: string): Promise<SignStatus> {
-  try { validateActivityInput(activity, input); } catch { throw new ProviderError('INVALID_INPUT', '输入不符合活动要求'); }
-  const jar = new RequestSession(session, transport);
-  const detail = await activityDetail(session, activity, transport);
-  if (detail.kind !== activity.kind) throw new ProviderError('PROVIDER_CHANGED', '活动类型已变化，请刷新活动');
-  if (detail.requirements?.face && !faceMediaId) return { state: 'WAITING_FACE', message: '需要人脸验证' };
-  if (detail.requirements?.captcha) return { state: 'WAITING_CAPTCHA', message: '需要人工完成验证码' };
-  if (detail.requirements?.location && !('location' in input || input.kind === 'location')) throw new ProviderError('INVALID_INPUT', '该活动要求位置输入');
-  const before = await presign(jar, session, activity);
-  if (before.state !== 'READY') return before;
-  await analysis(jar, activity);
-  const url = new URL('https://mobilelearn.chaoxing.com/pptSign/stuSignajax');
-  url.searchParams.set('activeId', activity.id); url.searchParams.set('courseId', activity.courseId);
-  url.searchParams.set('uid', session.userId); url.searchParams.set('fid', session.fid);
-  url.searchParams.set('name', session.name); url.searchParams.set('deviceCode', session.deviceCode);
-  url.searchParams.set('clientip', ''); url.searchParams.set('appType', '15');
-  const loc = input.kind === 'location' ? input : 'location' in input ? input.location : undefined;
-  locationParams(url, loc);
-  if (input.kind === 'location') { url.searchParams.set('address', input.address); url.searchParams.set('ifTiJiao', '1'); url.searchParams.set('vpProbability', '-1'); url.searchParams.set('vpStrategy', ''); }
-  if (input.kind === 'code') url.searchParams.set('signCode', input.code);
-  if (input.kind === 'gesture') url.searchParams.set('signCode', input.sequence);
-  if (input.kind === 'photo') {
-    const mediaId = input.mediaIdByAccount[session.userId];
-    if (!mediaId) throw new ProviderError('INVALID_INPUT', '缺少当前账号上传的照片');
-    url.searchParams.set('objectId', mediaId);
+  const response = await json(await client.request(apiUrl('/newsign/signDetail', {
+    activePrimaryId: activityId,
+    type: '1',
+    msg: code,
+  }).href));
+  if (response.isOver === undefined || typeof response.signCode !== 'string') {
+    throw new ProviderError('PROVIDER_CHANGED', '动态二维码校验结果格式已变化');
   }
-  if (input.kind === 'qr') {
-    const age = Date.now() - Date.parse(input.scannedAt);
-    if (!Number.isFinite(age) || age > 120000 || age < -30000) throw new ProviderError('QR_EXPIRED', '二维码扫描时间无效或已过期');
-    const qr = parseQrPayload(input.qrPayload, activity.id);
-    await verifyDynamicQr(jar, activity.id, qr.code);
-    url.searchParams.set('enc', qr.enc);
-    url.searchParams.set('vpProbability', '-1'); url.searchParams.set('vpStrategy', '');
+  if (Number(response.isOver) === 1 || response.signCode !== code) {
+    throw new ProviderError('QR_EXPIRED', '动态二维码已过期，请重新扫描');
   }
+}
+
+async function requestFaceProof(
+  client: RequestSession,
+  activityId: string,
+  mediaId: string,
+): Promise<string> {
+  const faceResult = JSON.stringify({
+    currentFaceId: mediaId,
+    LiveDetectionStatus: 1,
+    collectStatus: 1,
+    cxtime: String(Date.now()),
+  });
+  const response = await json(await client.request(apiUrl('/pptSign/check-face-result', {
+    DB_STRATEGY: 'PRIMARY_KEY',
+    STRATEGY_PARA: 'activeId',
+    activeId: activityId,
+    faceResult,
+  }).href));
+  if (typeof response.enc !== 'string' || !response.enc) {
+    throw new ProviderError(
+      'VALIDATION_FAILED',
+      typeof response.msg === 'string' ? response.msg.slice(0, 160) : '第三方人脸校验未通过',
+    );
+  }
+  return response.enc;
+}
+
+function addLocation(query: URLSearchParams, point?: LocationInput): void {
+  if (!point) {
+    query.set('latitude', '-1');
+    query.set('longitude', '-1');
+    return;
+  }
+  const latitude = Number(point.latitude.toFixed(6));
+  const longitude = Number(point.longitude.toFixed(6));
+  const serialized = JSON.stringify({
+    result: 1,
+    latitude,
+    longitude,
+    address: point.address,
+  });
+  query.set('latitude', latitude.toFixed(6));
+  query.set('longitude', longitude.toFixed(6));
+  query.set('location', serialized);
+  query.set('locationResult', serialized);
+}
+
+async function submissionUrl(
+  client: RequestSession,
+  account: ProviderSession,
+  activity: Activity,
+  input: SignInput,
+  faceMediaId?: string,
+): Promise<URL> {
+  const url = apiUrl('/pptSign/stuSignajax', {
+    activeId: activity.id,
+    courseId: activity.courseId,
+    uid: account.userId,
+    fid: account.fid,
+    name: account.name,
+    deviceCode: account.deviceCode,
+    clientip: '',
+    appType: '15',
+  });
+  const query = url.searchParams;
+  const point = input.kind === 'location' ? input : 'location' in input ? input.location : undefined;
+  addLocation(query, point);
+
+  switch (input.kind) {
+    case 'location':
+      query.set('address', input.address);
+      query.set('ifTiJiao', '1');
+      query.set('vpProbability', '-1');
+      query.set('vpStrategy', '');
+      break;
+    case 'code':
+      query.set('signCode', input.code);
+      break;
+    case 'gesture':
+      query.set('signCode', input.sequence);
+      break;
+    case 'photo': {
+      const mediaId = input.mediaIdByAccount[account.userId];
+      if (!mediaId) throw new ProviderError('INVALID_INPUT', '缺少当前账号上传的照片');
+      query.set('objectId', mediaId);
+      break;
+    }
+    case 'qr': {
+      const elapsed = Date.now() - Date.parse(input.scannedAt);
+      if (!Number.isFinite(elapsed) || elapsed > 120_000 || elapsed < -30_000) {
+        throw new ProviderError('QR_EXPIRED', '二维码扫描时间无效或已过期');
+      }
+      const parsed = parseQrPayload(input.qrPayload, activity.id);
+      await assertCurrentQr(client, activity.id, parsed.code);
+      query.set('enc', parsed.enc);
+      query.set('vpProbability', '-1');
+      query.set('vpStrategy', '');
+      break;
+    }
+  }
+
   if (faceMediaId) {
-    const enc = await faceEnc(jar, activity, faceMediaId);
-    url.searchParams.set('currentFaceId', faceMediaId);
-    url.searchParams.set('ifCFP', '0');
-    url.searchParams.set('faceEnc', enc);
-    url.searchParams.set('faceCode', '');
-    url.searchParams.set('faceEncAid', '');
+    const proof = await requestFaceProof(client, activity.id, faceMediaId);
+    query.set('currentFaceId', faceMediaId);
+    query.set('ifCFP', '0');
+    query.set('faceEnc', proof);
+    query.set('faceCode', '');
+    query.set('faceEncAid', '');
   }
-  const result = parseSubmitResponse(await (await jar.request(url.toString())).text());
+  return url;
+}
+
+export async function submit(
+  account: ProviderSession,
+  activity: Activity,
+  input: SignInput,
+  transport?: Transport,
+  faceMediaId?: string,
+): Promise<SignStatus> {
+  try {
+    validateActivityInput(activity, input);
+  } catch {
+    throw new ProviderError('INVALID_INPUT', '输入不符合活动要求');
+  }
+
+  const current = await activityDetail(account, activity, transport);
+  if (current.kind !== activity.kind) {
+    throw new ProviderError('PROVIDER_CHANGED', '活动类型已变化，请刷新活动');
+  }
+  if (current.requirements?.face && !faceMediaId) {
+    return { state: 'WAITING_FACE', message: '需要人脸验证' };
+  }
+  if (current.requirements?.captcha) {
+    return { state: 'WAITING_CAPTCHA', message: '需要人工完成验证码' };
+  }
+  if (current.requirements?.location && !('location' in input || input.kind === 'location')) {
+    throw new ProviderError('INVALID_INPUT', '该活动要求位置输入');
+  }
+
+  const client = new RequestSession(account, transport);
+  const prior = await readStatus(client, account, activity);
+  if (prior.state !== 'READY') return prior;
+  await establishSignContext(client, activity.id);
+  const url = await submissionUrl(client, account, activity, input, faceMediaId);
+  const result = parseSubmitResponse(await (await client.request(url.href)).text());
   if (result.state !== 'READY') return result;
-  // 接受提交不等于成功；再读第三方状态确认。
-  const verified = await presign(jar, session, activity);
+  const verified = await readStatus(client, account, activity);
   return verified.state === 'SIGNED' ? { ...verified, submitted: true } : verified;
 }

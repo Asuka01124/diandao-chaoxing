@@ -1,6 +1,12 @@
-# 到点
+# 到点（Diandao）
 
-单设备 React Native + TypeScript 工具。首次打开输入学习通账号和密码，登录后进入课程首页；应用直接调用学习通 HTTPS 接口，账号资料加密保存在本机。
+单设备 React Native + TypeScript 工具。首次打开输入学习通账号和密码，登录后进入课程首页；应用直接调用学习通 HTTPS 接口，账号资料加密保存在本机。本项目为独立工具，非学习通官方应用。
+
+## 下载与安装
+
+- [在 GitHub Releases 下载 Android arm64 APK](https://github.com/Asuka01124/diandao-chaoxing/releases/latest)。当前版本为 v0.5.13。
+- 在 Android 手机上安装 APK，首次打开按提示登录学习通账号。普通使用无需安装 Node.js、Bun 或 Android SDK。
+- 应用包名为 `dev.local.sign.tool`；使用相同签名的旧版可以覆盖安装。
 
 ## 运行
 
@@ -12,7 +18,7 @@ bun run typecheck
 bun test
 ```
 
-`D:\ChaoxingSignFaker` 中的 `chaoxing.com` HTTPS 地址是第三方协议端点。`packages/provider-adapter` 按该项目源码实现协议调用。每次请求关闭系统共享 Cookie，并按账号手动附加会话 Cookie；学习通子域共享当前账号的登录 Cookie。动态二维码含有 `c` 参数时，提交前会调用第三方 `signDetail` 检查是否过期。
+接口研究参考了 [ChaoxingSignFaker](https://github.com/aquamarine5/ChaoxingSignFaker) 的公开协议行为；该项目采用 AGPL-3.0。本仓库没有收录其 Kotlin 源文件，`packages/provider-adapter` 使用 TypeScript 实现接口调用。每次请求关闭系统共享 Cookie，并按账号手动附加会话 Cookie；学习通子域共享当前账号的登录 Cookie。动态二维码含有 `c` 参数时，提交前会调用第三方 `signDetail` 检查是否过期。
 
 启动移动端：
 
@@ -37,7 +43,7 @@ bun run --cwd apps/mobile start
 
 ## 当前边界
 
-- 第三方接口并非官方稳定 API。本实现基于 `D:/ChaoxingSignFaker` 的源码分析和脱敏夹具。接口变化会返回 `PROVIDER_CHANGED`，不会把未知响应当作成功。
+- 第三方接口并非官方稳定 API。本实现使用脱敏响应夹具验证接口行为。接口变化会返回 `PROVIDER_CHANGED`，不会把未知响应当作成功。
 - 应用内验证码提交尚未接入，需在官方客户端人工完成。人脸材料上传与签退协议尚待真实活动验证。
 - 已完成 Android arm64 APK 本地构建和签名验证；本环境没有连接真机，真实账号与真实活动的端到端流程尚未验证。
 - 单设备模式没有数据库、后台任务或跨设备同步。手机直接调用第三方 HTTPS 接口。
@@ -50,3 +56,9 @@ bun run --cwd apps/mobile start
 - `apps/mobile/src/ui`：页面布局、控件和状态组件。
 - `packages/provider-adapter/src`：按会话、登录、课程、活动、签到和媒体上传拆分的第三方协议模块。
 - `packages/shared`：共享模型与输入校验。
+
+## 许可
+
+项目原创代码与资源采用 [PolyForm Noncommercial License 1.0.0](LICENSE.md)。允许在非商业目的下使用、修改和分发；商业用途不在该许可授权范围内。该许可不覆盖 ChaoxingSignFaker 的代码；第三方依赖与服务各自适用其原有许可和条款。
+
+该许可允许查看源码，但由于限制商业使用，**不属于 OSI 认可的开源许可证**。
