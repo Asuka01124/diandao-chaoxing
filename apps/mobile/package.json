@@ -8,19 +8,24 @@
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
+  "expo": {
+    "autolinking": {
+      "searchPaths": ["../../node_modules"]
+    }
+  },
   "dependencies": {
-    "@maplibre/maplibre-react-native": "11.4.0",
     "@sign/provider-adapter": "0.1.0",
     "@sign/shared": "0.1.0",
     "@tamagui/config": "^2.0.0",
     "expo": "~57.0.26",
     "expo-camera": "~57.0.0",
+    "expo-constants": "~57.0.0",
     "expo-crypto": "~57.0.0",
     "expo-dev-client": "~57.0.19",
     "expo-file-system": "~57.0.0",
+    "expo-gaode-map": "^2.3.1",
     "expo-image-manipulator": "~57.0.20",
     "expo-image-picker": "~57.0.0",
-    "expo-location": "~57.0.20",
     "expo-router": "~57.0.24",
     "expo-secure-store": "~57.0.0",
     "expo-splash-screen": "~57.0.9",

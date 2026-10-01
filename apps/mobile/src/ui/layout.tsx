@@ -18,17 +18,17 @@ export function AppScreen({ title, subtitle, children, footer }: { title: string
 export function SectionTitle({ children }: { children: React.ReactNode }) { return <Text color="$muted" fontSize={12} fontWeight="600" letterSpacing={0.5} marginTop={24} marginBottom={9} marginLeft={14}>{children}</Text>; }
 export function GroupedList({ children }: { children: React.ReactNode }) { return <YStack backgroundColor="$panel" borderRadius="$panel" overflow="hidden" borderWidth={1} borderColor="$separator">{children}</YStack>; }
 
-export function HeroCard({ eyebrow, title, detail, action }: { eyebrow: string; title: string; detail: string; action?: React.ReactNode }) {
+export function HeroCard({ eyebrow, title, detail, action }: { eyebrow: string; title: string; detail?: string; action?: React.ReactNode }) {
   return <YStack backgroundColor="$soft" borderRadius={22} padding={20} gap={8}>
     <Text color="$brand" fontSize={12} fontWeight="700" letterSpacing={0.8}>{eyebrow}</Text>
     <Text color="$color" fontSize={22} lineHeight={28} fontWeight="700">{title}</Text>
-    <Text color="$muted" fontSize={14} lineHeight={21}>{detail}</Text>
+    {!!detail && <Text color="$muted" fontSize={14} lineHeight={21}>{detail}</Text>}
     {action && <YStack marginTop={8}>{action}</YStack>}
   </YStack>;
 }
-export function EmptyState({ title, detail }: { title: string; detail: string }) {
+export function EmptyState({ title, detail }: { title: string; detail?: string }) {
   return <YStack alignItems="center" justifyContent="center" paddingHorizontal={24} paddingVertical={32} gap={6}>
     <Text color="$color" fontSize={16} fontWeight="600">{title}</Text>
-    <Text color="$muted" fontSize={13} lineHeight={19} textAlign="center">{detail}</Text>
+    {!!detail && <Text color="$muted" fontSize={13} lineHeight={19} textAlign="center">{detail}</Text>}
   </YStack>;
 }

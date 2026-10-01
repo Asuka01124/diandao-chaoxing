@@ -17,6 +17,7 @@ export const api = {
   login: (identifier: string, password: string, deviceCode: string) => direct(() => provider.login(identifier, password, deviceCode)),
   check: (session: ProviderSession) => direct(() => provider.checkSession(session)),
   courses: (session: ProviderSession) => direct<Course[]>(() => provider.courses(session)),
+  courseCover: (session: ProviderSession, imageUrl: string) => direct(() => provider.courseCover(session, imageUrl)),
   activities: (session: ProviderSession, courseId: string, classId: string) => direct(() => provider.activities(session, courseId, classId)),
   detail: (session: ProviderSession, activity: Activity) => direct(() => provider.activityDetail(session, activity)),
   preflight: (session: ProviderSession, activity: Activity) => direct<SignStatus>(() => provider.preflight(session, activity)),

@@ -36,17 +36,15 @@ export default function ActivityScreen() {
     } catch (e) { setError(e instanceof Error ? e.message : '签退活动读取失败'); } finally { setBusy(false); }
   }
   const ended = activityPhase(activity) === 'ended';
-  return <AppScreen title={activity.title} subtitle={account ? `使用 ${account.label} 查看活动` : '活动详情'} footer={<PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })} disabled={activity.kind === 'unknown' || ended}>{ended ? '活动已结束' : '选择账号并准备代签'}</PrimaryButton>}>
-    <HeroCard eyebrow="签到活动" title={activity.signed === null ? '等待状态确认' : activity.signed ? '你已完成签到' : '可以准备签到'} detail="提交前会再次核查账号、活动和远端签到状态。" />
-    <SectionTitle>活动详情</SectionTitle><GroupedList>
-      <SettingsRow title="类型" detail={activity.kind} /><SettingsRow title="开始" detail={activity.startTime ? new Date(activity.startTime).toLocaleString() : '未知'} />
-      <SettingsRow title="结束" detail={activity.endTime ? new Date(activity.endTime).toLocaleString() : '未知'} /><SettingsRow title="状态" detail={activity.signed === null ? '待查询' : activity.signed ? '已签到' : '未签到'} />
-      <SettingsRow title="活动进度" detail={ended ? '已结束' : '进行中'} />
-      <SettingsRow title="验证要求" detail={activity.requirements ? [activity.requirements.captcha && '验证码', activity.requirements.face && '人脸', activity.requirements.location && '位置', activity.requirements.photo && '照片'].filter(Boolean).join('、') || '无' : '待查询'} />
-      {activity.relation?.signInId && <SettingsRow title="关联签到 ID" detail={activity.relation.signInId} />}
-      {activity.relation?.signOutId && <SettingsRow title="关联签退" detail={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? '尚未发布' : '已发布，点击查看'} onPress={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? undefined : () => { void openSignOut(); }} />}
+  const requirement = activity.requirements ? [activity.requirements.captcha && '验证码', activity.requirements.face && '人脸', activity.requirements.location && '位置', activity.requirements.photo && '照片'].filter(Boolean).join('、') : '';
+  return <AppScreen title={activity.title} subtitle={account?.label} footer={!ended && activity.kind !== 'unknown' ? <PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })}>选择账号签到</PrimaryButton> : undefined}>
+    <HeroCard eyebrow={ended ? '已结束' : '进行中'} title={activity.signed ? '你已签到' : ended ? '签到已结束' : '可以签到'} detail={ended ? undefined : '可选择账号，帮同学完成签到。'} />
+    <SectionTitle>签到信息</SectionTitle><GroupedList>
+      {!!activity.endTime && <SettingsRow title="截止时间" detail={new Date(activity.endTime).toLocaleString()} />}
+      {!!requirement && <SettingsRow title="需要" detail={requirement} />}
+      {activity.relation?.signOutId && <SettingsRow title="签退" detail={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? '尚未开始' : '点击查看'} onPress={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? undefined : () => { void openSignOut(); }} />}
     </GroupedList>
-    <YStack marginTop={16}><PrimaryButton onPress={() => { void refresh(); }} disabled={busy || !account}>{busy ? '读取中…' : '刷新详情'}</PrimaryButton></YStack>
+    <YStack marginTop={16}><PrimaryButton onPress={() => { void refresh(); }} disabled={busy || !account}>{busy ? '更新中…' : '更新状态'}</PrimaryButton></YStack>
     {!!error && <Text color="$danger" marginTop={12}>{error}</Text>}
   </AppScreen>;
 }

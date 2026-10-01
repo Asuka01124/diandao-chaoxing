@@ -6,7 +6,7 @@ import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { activityPhase } from '../../src/features/courses/activity-phase';
 import { useVault } from '../../src/state';
-import { AppScreen, EmptyState, GroupedList, HeroCard, PrimaryButton, SectionTitle, SettingsRow } from '../../src/ui';
+import { AppScreen, EmptyState, GroupedList, PrimaryButton, SectionTitle, SettingsRow } from '../../src/ui';
 
 export default function CourseActivitiesScreen() {
   const { id, classId, accountId, name } = useLocalSearchParams<{ id: string; classId: string; accountId?: string; name?: string }>();
@@ -36,11 +36,10 @@ export default function CourseActivitiesScreen() {
   const ongoing = list.filter(a => activityPhase(a) === 'ongoing');
   const ended = list.filter(a => activityPhase(a) === 'ended');
   const rows = (items: Activity[], emptyTitle: string) => <GroupedList>{items.length ? items.map(a => <SettingsRow key={a.id} title={a.title}
-    detail={`${a.signed ? '已签到' : '未签到或待确认'} · ${a.startTime ? new Date(a.startTime).toLocaleString() : '时间未知'}`}
+    detail={a.signed ? '我已签到' : a.startTime ? new Date(a.startTime).toLocaleString() : undefined}
     symbol="✓" onPress={() => router.push({ pathname: '/activity/[id]', params: { id: a.id, accountId: account?.id } })} />)
-    : <EmptyState title={emptyTitle} detail={busy ? '正在读取，请稍候' : '下拉或点击刷新后查看'} />}</GroupedList>;
-  return <AppScreen title={name || '课程签到'} subtitle={account ? `使用 ${account.label} 查看` : undefined}>
-    <HeroCard eyebrow="课程签到" title={`${ongoing.length} 个进行中`} detail={`已结束 ${ended.length} 个。点击活动可查看详情并进入代签流程。`} />
+    : <EmptyState title={busy ? '正在读取…' : emptyTitle} />}</GroupedList>;
+  return <AppScreen title={name || '课程签到'}>
     <SectionTitle>进行中</SectionTitle>{rows(ongoing, '暂无进行中的签到')}
     <SectionTitle>已结束</SectionTitle>{rows(ended, '暂无已结束的签到')}
     <YStack marginTop={18}><PrimaryButton disabled={busy} onPress={() => { void refresh(); }}>{busy ? '正在读取…' : '刷新签到活动'}</PrimaryButton></YStack>

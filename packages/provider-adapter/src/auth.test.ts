@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { login } from "./auth";
-import { courses } from "./courses";
+import { courseCover, courses } from "./courses";
 import { RequestSession } from "./session";
 
 test("登录 Cookie 跨学习通子域传递给身份查询", async () => {
@@ -80,6 +80,22 @@ test("登录会话可继续读取课程", async () => {
   expect(list).toEqual([
     { id: "8", classId: "7", name: "示例课程", teacher: undefined, imageUrl: "https://example.com/course.png" },
   ]);
+});
+
+test("课程封面使用学习通会话下载真实图片", async () => {
+  const session = {
+    identifier: "13800000000", encryptedPassword: "secret", userId: "123", fid: "0", name: "测试用户", deviceCode: "device",
+    cookies: [{ name: "sid", value: "abc", domain: "chaoxing.com", path: "/" }],
+  };
+  let sentCookie = "";
+  const cover = await courseCover(session, "https://p.ananas.chaoxing.com/course.jpg", async (_url, init) => {
+    sentCookie = new Headers(init.headers).get("cookie") ?? "";
+    return new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { "content-type": "image/jpeg" } });
+  });
+  expect(sentCookie).toContain("sid=abc");
+  expect([...cover.bytes]).toEqual([0xff, 0xd8, 0xff]);
+  expect(cover.mime).toBe("image/jpeg");
+  await expect(courseCover(session, "https://example.com/image.jpg")).rejects.toThrow("无效的课程封面地址");
 });
 
 test("登录响应缺少会话 Cookie 时明确提示", async () => {
