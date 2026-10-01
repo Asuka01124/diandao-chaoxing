@@ -7,6 +7,7 @@ import { TamaguiProvider, Theme } from 'tamagui';
 import config from '../tamagui.config';
 import { VaultProvider, useVault } from '../src/state';
 import { StartupSplash } from '../src/features/startup/startup-splash';
+import { FeedbackProvider } from '../src/ui';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -15,7 +16,7 @@ function ThemedNavigator() {
   const { data } = useVault();
   const appearance = data?.settings.appearance ?? 'system';
   const name = appearance === 'system' ? system === 'dark' ? 'dark' : 'light' : appearance;
-  return <Theme name={name}><StatusBar style={name === 'dark' ? 'light' : 'dark'} /><Stack screenOptions={{ headerShown: false }} /></Theme>;
+  return <Theme name={name}><FeedbackProvider><StatusBar style={name === 'dark' ? 'light' : 'dark'} /><Stack screenOptions={{ headerShown: false }} /></FeedbackProvider></Theme>;
 }
 
 export default function RootLayout() {

@@ -13,7 +13,8 @@ export function CourseCard({ course, session, onPress, layout = 'list' }: { cour
     if (course.imageUrl) void cachedCourseCover(session, course.imageUrl).then(uri => { if (active) setImageUri(uri); }).catch(() => { if (active) setImageFailed(true); });
     return () => { active = false; };
   }, [course.imageUrl, session.userId]);
-  if (layout === 'grid') return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`} style={{ flex: 1 }}>
+  if (layout === 'grid') return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`}
+    style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.72 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] })}>
     <YStack flex={1} minHeight={188} backgroundColor="$panel" borderWidth={1} borderColor="$separator" borderRadius={18} overflow="hidden">
       {imageUri && !imageFailed
         ? <Image source={{ uri: imageUri }} resizeMode="cover" style={{ width: '100%', height: 112, backgroundColor: '#ececec' }} onError={() => setImageFailed(true)} />
@@ -24,7 +25,7 @@ export function CourseCard({ course, session, onPress, layout = 'list' }: { cour
       </YStack>
     </YStack>
   </Pressable>;
-  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`}>
+  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`} style={({ pressed }) => ({ opacity: pressed ? 0.58 : 1 })}>
     <XStack minHeight={80} alignItems="center" paddingHorizontal={14} paddingVertical={12} borderBottomWidth={1} borderColor="$separator" gap={14}>
       {imageUri && !imageFailed
         ? <Image source={{ uri: imageUri }} style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: '#ececec' }} onError={() => setImageFailed(true)} />

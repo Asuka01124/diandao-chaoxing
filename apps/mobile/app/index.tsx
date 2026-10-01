@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Input, Text, YStack } from 'tamagui';
+import { Input, YStack } from 'tamagui';
 import { useVault } from '../src/state';
 import { cleanupCompletedPhoto, runJob } from '../src/core/jobs';
 import { saveLogin } from '../src/features/accounts/account-service';
 import { hasPrimaryAccount } from '../src/features/accounts/account-role';
-import { AppScreen, HeroCard, Message, PrimaryButton } from '../src/ui';
+import { AppScreen, FeedbackNotice, HeroCard, Message, PrimaryButton, useFeedback } from '../src/ui';
 
 export default function LoginScreen() {
   const store = useVault();
@@ -13,6 +13,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [reloading, setReloading] = useState(false);
+  const notify = useFeedback();
   const resumed = useRef(false);
   useEffect(() => {
     const data = store.data;
@@ -27,15 +29,19 @@ export default function LoginScreen() {
     router.replace('/(tabs)/courses');
   }, [store.ready, store.data?.accounts]);
 
-  if (!store.ready) return <AppScreen title="学习通登录"><Message>正在读取本机资料…</Message></AppScreen>;
-  if (!store.data) return <AppScreen title="无法读取资料"><Message>{store.error ?? '请重试'}</Message><YStack marginTop={20}><PrimaryButton onPress={() => { void store.reload(); }}>重试</PrimaryButton></YStack></AppScreen>;
+  if (!store.ready) return <AppScreen title="学习通登录"><FeedbackNotice message="正在读取本机资料…" tone="loading" /></AppScreen>;
+  if (!store.data) return <AppScreen title="无法读取资料"><FeedbackNotice message={store.error ?? '请重试'} tone="error" /><YStack marginTop={20}><PrimaryButton loading={reloading} onPress={() => {
+    setReloading(true); notify('正在重新读取资料…', 'loading');
+    void store.reload().then(() => notify('本机资料已重新读取', 'success')).catch(e => notify(e instanceof Error ? e.message : '读取失败', 'error')).finally(() => setReloading(false));
+  }}>重试</PrimaryButton></YStack></AppScreen>;
   if (hasPrimaryAccount(store.data)) return null;
 
   async function submit() {
-    if (!identifier.trim() || !password) { setError('请输入学习通账号和密码'); return; }
+    if (!identifier.trim() || !password) { setError('请输入学习通账号和密码'); notify('请输入学习通账号和密码', 'error'); return; }
     setBusy(true); setError('');
-    try { await saveLogin(store, identifier, password, { role: 'primary' }); setPassword(''); router.replace('/(tabs)/courses'); }
-    catch (e) { setError(e instanceof Error ? e.message : '登录失败'); }
+    notify('正在登录学习通…', 'loading');
+    try { await saveLogin(store, identifier, password, { role: 'primary' }); setPassword(''); notify('登录成功，正在进入课程', 'success'); router.replace('/(tabs)/courses'); }
+    catch (e) { const message = e instanceof Error ? e.message : '登录失败'; setError(message); notify(message, 'error'); }
     finally { setBusy(false); }
   }
   return <AppScreen title="登录学习通" subtitle="使用学习通账号进入课程首页">
@@ -43,8 +49,8 @@ export default function LoginScreen() {
     <YStack backgroundColor="$panel" borderRadius="$panel" padding={18} marginTop={24} gap={14}>
       <Input placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={50} />
       <Input placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" backgroundColor="$field" borderWidth={0} borderRadius="$control" minHeight={50} />
-      <PrimaryButton disabled={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录并进入课程'}</PrimaryButton>
+      <PrimaryButton loading={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录并进入课程'}</PrimaryButton>
     </YStack>
-    {!!error && <Text color="$danger" marginTop={14}>{error}</Text>}
+    {!!error && <YStack marginTop={14}><FeedbackNotice message={error} tone="error" /></YStack>}
   </AppScreen>;
 }

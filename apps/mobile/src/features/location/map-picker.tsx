@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Platform, Pressable, View } from 'react-native';
+import { ActivityIndicator, Linking, Modal, Platform, Pressable, View } from 'react-native';
 import Constants from 'expo-constants';
 import { ExpoGaodeMapModule, MapView, Marker, reGeocode, type MapViewRef } from 'expo-gaode-map';
 import { Button, Input, Text, XStack, YStack } from 'tamagui';
 import { locationSchema, type LocationInput } from '@sign/shared';
-import { PrimaryButton } from '../../ui';
+import { FeedbackNotice, PrimaryButton, type FeedbackTone } from '../../ui';
 
 const DEFAULT_CENTER = { latitude: 39.9093, longitude: 116.3974 };
 const PRIVACY_VERSION = '2026-10-01';
@@ -15,6 +15,7 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
   const [point, setPoint] = useState<{ latitude: number; longitude: number } | null>(null);
   const [address, setAddress] = useState('');
   const [message, setMessage] = useState('');
+  const [messageTone, setMessageTone] = useState<FeedbackTone>('info');
   const [locating, setLocating] = useState(false);
   const [privacyReady, setPrivacyReady] = useState(false);
   const configured = Platform.OS === 'ios' ? !!Constants.expoConfig?.extra?.amapIosConfigured : !!Constants.expoConfig?.extra?.amapAndroidConfigured;
@@ -25,6 +26,7 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
     setPoint(initial ? { latitude: initial.latitude, longitude: initial.longitude } : null);
     setAddress(initial?.address ?? '');
     setMessage('点击地图选点，或使用当前位置');
+    setMessageTone('info');
     if (configured) {
       ExpoGaodeMapModule.setPrivacyVersion(PRIVACY_VERSION);
       setPrivacyReady(ExpoGaodeMapModule.getPrivacyStatus().isReady);
@@ -33,32 +35,32 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
 
   async function choose(next: { latitude: number; longitude: number }) {
     const id = ++request.current;
-    setPoint(next); setAddress(''); setMessage('正在查询附近地址…');
+    setPoint(next); setAddress(''); setMessage('正在查询附近地址…'); setMessageTone('loading');
     if (map.current) void map.current.moveCamera({ target: next, zoom: 16 }, 350).catch(() => {});
     try {
       const result = await reGeocode({ location: next });
       if (request.current !== id) return;
       setAddress(result.pois[0]?.name || result.formattedAddress || '');
-      setMessage('确认位置名称后即可使用');
+      setMessage('已选中位置，确认名称后即可使用'); setMessageTone('success');
     } catch {
-      if (request.current === id) setMessage('地址查询失败，请填写位置名称');
+      if (request.current === id) { setMessage('地址查询失败，请填写位置名称'); setMessageTone('error'); }
     }
   }
 
   async function useCurrentLocation() {
-    setLocating(true); setMessage('正在定位…');
+    setLocating(true); setMessage('正在定位…'); setMessageTone('loading');
     try {
       const permission = await ExpoGaodeMapModule.requestLocationPermission();
       if (!permission.granted) throw new Error('请允许位置权限，或直接在地图上选点');
       const current = await ExpoGaodeMapModule.getCurrentLocation();
       await choose({ latitude: current.latitude, longitude: current.longitude });
-    } catch (error) { setMessage(error instanceof Error ? error.message : '定位失败，请在地图上选点'); }
+    } catch (error) { setMessage(error instanceof Error ? error.message : '定位失败，请在地图上选点'); setMessageTone('error'); }
     finally { setLocating(false); }
   }
 
   function confirm() {
     const parsed = locationSchema.safeParse({ longitude: point?.longitude, latitude: point?.latitude, address: address.trim() });
-    if (!parsed.success) { setMessage(point ? '请填写位置名称' : '请先选择位置'); return; }
+    if (!parsed.success) { setMessage(point ? '请填写位置名称' : '请先选择位置'); setMessageTone('error'); return; }
     onPick(parsed.data); onClose();
   }
 
@@ -70,7 +72,7 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
     <YStack flex={1} backgroundColor="$background" paddingTop={32}>
       <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={20} paddingBottom={12}>
-        <Pressable onPress={onClose} accessibilityRole="button"><Text color="$brand" fontSize={16}>取消</Text></Pressable>
+        <Pressable onPress={onClose} accessibilityRole="button" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1, padding: 6 })}><Text color="$brand" fontSize={16}>取消</Text></Pressable>
         <Text color="$color" fontSize={18} fontWeight="700">选择位置</Text>
         <View style={{ width: 32 }} />
       </XStack>
@@ -90,9 +92,9 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
           </MapView>
         </View>
         <YStack padding={20} paddingBottom={30} gap={12} backgroundColor="$panel" borderTopWidth={1} borderColor="$separator">
-          <Text color="$muted" fontSize={13}>{message}</Text>
+          <FeedbackNotice message={message} tone={messageTone} />
           <Input placeholder="位置名称或详细地址" value={address} onChangeText={setAddress} />
-          <Button onPress={() => { void useCurrentLocation(); }} disabled={locating} backgroundColor="$soft" color="$color">{locating ? '正在定位…' : '使用当前位置'}</Button>
+          <Button onPress={() => { void useCurrentLocation(); }} disabled={locating} opacity={locating ? 0.6 : 1} pressStyle={{ opacity: 0.7, scale: 0.98 }} backgroundColor="$soft" color="$color" minHeight={48} accessibilityState={{ busy: locating, disabled: locating }}>{locating && <ActivityIndicator size="small" />}{locating ? '正在定位…' : '使用当前位置'}</Button>
           <PrimaryButton onPress={confirm}>使用此位置</PrimaryButton>
           <Text color="$muted" fontSize={11} textAlign="center">地图服务由高德开放平台提供</Text>
         </YStack>
