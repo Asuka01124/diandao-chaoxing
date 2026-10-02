@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { router } from 'expo-router';
 import { Text, XStack, YStack } from 'tamagui';
 import { useVault } from '../../src/state';
-import { isDemoActivity } from '../../src/features/courses/demo-course';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { AppScreen, EmptyState, GroupedList, HeroCard, SectionTitle, SettingsRow } from '../../src/ui';
 
@@ -19,6 +18,6 @@ export default function JobsScreen() {
           <Text color="$muted" fontSize={12} fontWeight="600">{item.label}</Text>
         </YStack>)}
     </XStack>
-    <SectionTitle>最近任务</SectionTitle><GroupedList>{data.jobs.length ? [...data.jobs].reverse().map(job => <SettingsRow key={job.id} title={job.activity.title} detail={`${isDemoActivity(job.activity) ? '本机模拟 · ' : ''}${new Date(job.createdAt).toLocaleString()} · ${job.state === 'DONE' ? '已完成' : job.state === 'WAITING' ? '等待输入' : '执行中'}`} symbol={job.state === 'DONE' ? '✓' : '…'} onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })} />) : <EmptyState title="还没有任务" detail="在课程页选择签到活动，即可开始创建任务" />}</GroupedList>
+    <SectionTitle>最近任务</SectionTitle><GroupedList>{data.jobs.length ? [...data.jobs].reverse().map(job => <SettingsRow key={job.id} title={job.activity.title} detail={`${new Date(job.createdAt).toLocaleString()} · ${job.state === 'DONE' ? '已完成' : job.state === 'WAITING' ? '等待输入' : '执行中'}`} symbol={job.state === 'DONE' ? '✓' : '…'} onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })} />) : <EmptyState title="还没有任务" detail="在课程页选择签到活动，即可开始创建任务" />}</GroupedList>
   </AppScreen>;
 }

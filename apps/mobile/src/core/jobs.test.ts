@@ -1,6 +1,6 @@
 import { beforeEach, expect, mock, test } from 'bun:test';
 import { emptyVault, type Activity, type ProviderSession, type SignInput, type VaultData } from '@sign/shared';
-import { demoActivities } from '../features/courses/demo-course';
+import { DEMO_COURSE_ID } from '../features/courses/demo-course';
 
 let counter = 0;
 mock.module('expo-crypto', () => ({ randomUUID: () => `job-${++counter}` }));
@@ -27,6 +27,8 @@ mock.module('./api', () => ({
 const { createJob, runJob, replaceQrAndResume, provideFaceAndResume, retryAttempt } = await import('./jobs');
 
 const activity: Activity = { id: 'act', courseId: 'course', classId: 'class', source: 'course', title: '测试签到', kind: 'click', startTime: null, endTime: null, signed: null, ext: '{}' };
+const legacyActivities = (): Activity[] => (['click', 'location', 'photo', 'qr', 'code', 'gesture'] as const)
+  .map(kind => ({ ...activity, id: `_daodian_demo_${kind}_`, courseId: DEMO_COURSE_ID, classId: '_daodian_demo_class_', kind }));
 const session = (id: string): ProviderSession => ({ identifier: id, encryptedPassword: 'encrypted', cookies: [], userId: id, fid: '0', name: id, deviceCode: id });
 function store() {
   let data: VaultData = emptyVault();
@@ -35,7 +37,7 @@ function store() {
 }
 beforeEach(() => { counter = 0; clearedPhotos.length = 0; providerCalls.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.preflight = async () => ({ state: 'READY' }); behavior.upload = async () => ({ mediaId: 'image' }); });
 
-test('六种测试签到只生成本机结果，不调用学习通接口', async () => {
+test('旧测试课程的六种任务不会调用学习通接口', async () => {
   const state = store();
   const inputs: SignInput[] = [
     { kind: 'click' },
@@ -45,13 +47,13 @@ test('六种测试签到只生成本机结果，不调用学习通接口', async
     { kind: 'code', code: '1234' },
     { kind: 'gesture', sequence: '1234' },
   ];
-  for (const [index, activity] of demoActivities().entries()) {
+  for (const [index, activity] of legacyActivities().entries()) {
     const job = await createJob(state, activity, ['a', 'b'], inputs[index], index === 2 ? 'file:///cache/demo-photo.jpg' : undefined);
     await runJob(state, job.id);
   }
   expect(providerCalls).toEqual([]);
   expect(state.get().attempts).toHaveLength(12);
-  expect(state.get().attempts.every(attempt => attempt.state === 'SUCCESS' && attempt.message?.includes('没有签到记录'))).toBe(true);
+  expect(state.get().attempts.every(attempt => attempt.state === 'FAILED' && attempt.message?.includes('未向学习通提交') && attempt.count === 0)).toBe(true);
   expect(state.get().jobs.every(job => job.state === 'DONE')).toBe(true);
   expect(state.get().activityCache).toEqual([]);
   expect(clearedPhotos).toEqual(['file:///cache/demo-photo.jpg']);

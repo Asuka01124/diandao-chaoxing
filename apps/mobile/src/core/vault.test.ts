@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { beforeEach, expect, test } from 'bun:test';
-import { emptyVault, type Account, type VaultData } from '@sign/shared';
+import { emptyVault, type Account, type Activity, type VaultData } from '@sign/shared';
 import { EncryptedVault, type VaultPorts } from './vault-core';
-import { demoActivities } from '../features/courses/demo-course';
+import { DEMO_COURSE_ID } from '../features/courses/demo-course';
 
 const files = new Map<string, Uint8Array>();
 let key: string | null = null;
@@ -79,7 +79,7 @@ test('旧版本机资料缺少预留照片列表时自动补齐', async () => {
 test('升级后旧演练活动和任务不再出现在正式数据中', async () => {
   const vault = new EncryptedVault(ports);
   const data = emptyVault();
-  const demo = demoActivities()[0];
+  const demo: Activity = { id: '_daodian_demo_click_', courseId: DEMO_COURSE_ID, classId: '_daodian_demo_class_', source: 'course', title: '旧演练活动', kind: 'click', startTime: null, endTime: null, signed: false, ext: '{}' };
   const real = { ...demo, id: 'real-activity', courseId: 'real-course', classId: 'real-class' };
   data.activityCache = [demo, real];
   data.jobs = [

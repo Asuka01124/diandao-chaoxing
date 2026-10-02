@@ -33,10 +33,7 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
   const previous = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId)?.state;
   try {
     if (isDemoActivity(job.activity)) {
-      await setAttempt(store, job.id, accountId, 'PREFLIGHT', '正在核对本机演练输入');
-      await setAttempt(store, job.id, accountId, 'SUBMITTING', '仅本机模拟，不向学习通提交');
-      await setAttempt(store, job.id, accountId, 'VERIFYING', '正在生成模拟结果');
-      await setAttempt(store, job.id, accountId, 'SUCCESS', '本机演练通过；学习通没有签到记录');
+      await setAttempt(store, job.id, accountId, 'FAILED', '旧测试课程已移除，未向学习通提交', 'INVALID_INPUT');
       return 'continue';
     }
     await setAttempt(store, job.id, accountId, 'PREFLIGHT');
@@ -125,7 +122,7 @@ export async function cleanupCompletedPhoto(store: VaultAccess, jobId: string): 
   const job = store.get().jobs.find(j => j.id === jobId);
   if (!job?.photoUri || job.state !== 'DONE') return;
   const photoInput = job.input.kind === 'photo' ? job.input : null;
-  const retryNeedsFile = photoInput !== null && job.accountIds.some(id =>
+  const retryNeedsFile = !isDemoActivity(job.activity) && photoInput !== null && job.accountIds.some(id =>
     !photoInput.mediaIdByAccount[id] && store.get().attempts.some(a => a.jobId === jobId && a.accountId === id && (a.state === 'FAILED' || a.state === 'REAUTH_REQUIRED')));
   const retention = store.get().settings.imageRetentionHours * 60 * 60_000;
   if (retryNeedsFile && Date.now() - Date.parse(job.createdAt) < retention) return;

@@ -8,7 +8,6 @@ import { createJob, runJob } from '../../src/core/jobs';
 import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } from '../../src/core/media';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
-import { DEMO_QR_PAYLOAD, isDemoActivity } from '../../src/features/courses/demo-course';
 import { GesturePatternPicker } from '../../src/features/courses/gesture-pattern-picker';
 import { prepareErrorMessage } from '../../src/features/courses/prepare-error';
 import { MapPicker } from '../../src/features/location/map-picker';
@@ -19,18 +18,16 @@ import { AppScreen, FeedbackNotice, GlassInput, GroupedList, HeroCard, Message, 
 export default function PrepareScreen() {
   const { id, accountId, selectedIds, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; accountId?: string; selectedIds?: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
   const activity = data?.activityCache.find(a => a.id === id && a.cacheAccountId === accountId);
-  const [selected, setSelected] = useState<string[]>(() => selectedIds ? selectedIds.split(',').filter(Boolean) : activity && isDemoActivity(activity) && accountId ? [accountId] : []);
+  const [selected, setSelected] = useState<string[]>(() => selectedIds ? selectedIds.split(',').filter(Boolean) : []);
   const [location, setLocation] = useState<LocationInput | null>(null); const [mapOpen, setMapOpen] = useState(false);
   const [code, setCode] = useState(''); const [gesture, setGesture] = useState(''); const [qr, setQr] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const [demoQrAt, setDemoQrAt] = useState<string | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [reservedPhotoId, setReservedPhotoId] = useState<string | null>(null);
   const [photoLabel, setPhotoLabel] = useState('');
   const notify = useFeedback();
   useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
-  useEffect(() => { if (qrPayload) { setQr(qrPayload); setDemoQrAt(null); setError(''); } }, [qrPayload]);
+  useEffect(() => { if (qrPayload) { setQr(qrPayload); setError(''); } }, [qrPayload]);
   if (!data || !activity) return null;
-  const demo = isDemoActivity(activity);
   function input(): SignInput {
     if (!activity) throw new Error('活动不存在');
     if ((activity.kind === 'location' || activity.requirements?.location) && !location) throw new Error('请先在地图上选择签到位置');
@@ -45,10 +42,8 @@ export default function PrepareScreen() {
       return { kind: 'gesture', sequence: gesture, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'qr') {
-      const currentAt = demoQrAt ?? scannedAt;
-      const currentPayload = demoQrAt ? DEMO_QR_PAYLOAD : qrPayload;
-      if (!currentAt || qr !== currentPayload) throw new Error(demo ? '请先使用模拟二维码或扫描二维码' : '请先扫描当前活动的二维码');
-      return { kind: 'qr', qrPayload: qr, scannedAt: currentAt, ...(location ? { location } : {}) };
+      if (!scannedAt || qr !== qrPayload) throw new Error('请先扫描当前活动的二维码');
+      return { kind: 'qr', qrPayload: qr, scannedAt, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'photo') return { kind: 'photo', mediaIdByAccount: {}, ...(location ? { location } : {}) };
     throw new Error('当前活动类型尚未接入安全提交');
@@ -71,7 +66,7 @@ export default function PrepareScreen() {
       }
       const job = await createJob(store, activity, selected, prepared, stagedUri);
       stagedUri = undefined;
-      notify(demo ? '演练已创建，不会提交学习通' : '任务已创建，正在执行', 'success');
+      notify('任务已创建，正在执行', 'success');
       router.replace({ pathname: '/job/[id]', params: { id: job.id } });
       void runJob(store, job.id).catch(e => notify(e instanceof Error ? e.message : '任务执行失败，请查看结果', 'error'));
     }
@@ -79,23 +74,22 @@ export default function PrepareScreen() {
     finally { setBusy(false); }
   }
   const needsLocation = activity.kind === 'location' || activity.requirements?.location;
-  return <AppScreen title={demo ? '准备模拟签到' : '准备签到'} subtitle={activity.title} footer={<YStack gap={8}>
+  return <AppScreen title="准备签到" subtitle={activity.title} footer={<YStack gap={8}>
     {!!error && <FeedbackNotice message={error} tone="error" />}
     {!selected.length && <Message>请先选择至少一个账号</Message>}
-    <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>{`为 ${selected.length} 个账号${demo ? '演练' : '签到'}`}</PrimaryButton>
+    <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>{`为 ${selected.length} 个账号签到`}</PrimaryButton>
   </YStack>}>
-    <HeroCard eyebrow={demo ? '本机模拟' : '签到准备'} title={`${selected.length} 个账号已选择`} detail={demo ? '可检查选账号、填写信息和查看任务结果；不会向学习通提交。' : '确认参与账号，再补充本次签到要求的信息。'} />
+    <HeroCard eyebrow="签到准备" title={`${selected.length} 个账号已选择`} detail="确认参与账号，再补充本次签到要求的信息。" />
     <SectionTitle>选择账号</SectionTitle><GroupedList>{data.accounts.map(a => <SettingsRow key={a.id} title={a.label} detail={a.role === 'primary' ? '我的账号' : undefined} onPress={() => { setError(''); setSelected(ids => ids.includes(a.id) ? ids.filter(id => id !== a.id) : [...ids, a.id]); }} accessory={<Text color="$brand" fontSize={20}>{selected.includes(a.id) ? '✓' : '○'}</Text>} />)}</GroupedList>
     {needsLocation && <><SectionTitle>签到位置</SectionTitle><GroupedList><SettingsRow title={location?.address ?? '尚未选择位置'} detail={location ? '点击可在地图上重新选点' : '点击打开地图，选择签到地点'} symbol="⌖" onPress={() => setMapOpen(true)} /></GroupedList></>}
     {needsLocation && !!data.settings.favoriteLocations.length && <><SectionTitle>收藏位置</SectionTitle><GroupedList>{data.settings.favoriteLocations.map((item, index) => <SettingsRow key={index} title={item.address} detail="点击使用此位置" selected={location?.latitude === item.latitude && location?.longitude === item.longitude} onPress={() => { setLocation(item); setError(''); notify('已选用收藏位置', 'success'); }} />)}</GroupedList></>}
     <MapPicker visible={mapOpen} initial={location} onClose={() => setMapOpen(false)} onPick={point => { setLocation(point); setError(''); notify('签到位置已选择', 'success'); }} />
     {activity.kind === 'code' && <><SectionTitle>签到码</SectionTitle><GlassInput placeholder="请输入数字签到码" value={code} onChangeText={value => { setCode(value); setError(''); }} keyboardType="number-pad" /></>}
     {activity.kind === 'gesture' && <><SectionTitle>手势签到</SectionTitle><GesturePatternPicker value={gesture} onChange={value => { setGesture(value); setError(''); }} /></>}
-    {activity.kind === 'qr' && <><SectionTitle>二维码</SectionTitle><YStack gap={10}><Message>{demoQrAt ? '已填入模拟二维码' : scannedAt && qr === qrPayload ? `已于 ${new Date(scannedAt).toLocaleTimeString()} 扫描` : demo ? '可使用模拟二维码，也可打开相机练习扫码' : '请扫描当前活动的二维码'}</Message>
-      {demo && <PrimaryButton onPress={() => { setQr(DEMO_QR_PAYLOAD); setDemoQrAt(new Date().toISOString()); setError(''); notify('模拟二维码已填入', 'success'); }}>使用模拟二维码</PrimaryButton>}
+    {activity.kind === 'qr' && <><SectionTitle>二维码</SectionTitle><YStack gap={10}><Message>{scannedAt && qr === qrPayload ? `已于 ${new Date(scannedAt).toLocaleTimeString()} 扫描` : '请扫描当前活动的二维码'}</Message>
       <PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } })}>打开扫码</PrimaryButton></YStack></>}
     {activity.kind === 'photo' && <><SectionTitle>签到照片</SectionTitle><YStack gap={12}>
-      <Message>{photoUri ? demo ? '演练只在本机处理，不会上传照片' : '确认后将按账号分别上传这张照片' : '直接选择下方的预留照片，也可以拍摄或从相册选择'}</Message>
+      <Message>{photoUri ? '确认后将按账号分别上传这张照片' : '直接选择下方的预留照片，也可以拍摄或从相册选择'}</Message>
       {photoUri && <GroupedList><XStack padding={14} alignItems="center" gap={13}>
         <Image source={{ uri: photoUri }} resizeMode="cover" accessibilityLabel="当前选择的签到照片预览" style={{ width: 68, height: 68, borderRadius: 12 }} />
         <YStack flex={1} gap={3}><Text color="$muted" fontSize={12}>当前选择</Text><Text color="$color" fontSize={16} fontWeight="600" numberOfLines={2}>{photoLabel}</Text></YStack>

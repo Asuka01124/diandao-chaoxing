@@ -6,7 +6,7 @@ import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { activityPhase } from '../../src/features/courses/activity-phase';
 import { isDemoActivity } from '../../src/features/courses/demo-course';
-import { AppScreen, FeedbackNotice, GroupedList, HeroCard, PrimaryButton, SectionTitle, SettingsRow, useFeedback, type FeedbackTone } from '../../src/ui';
+import { AppScreen, EmptyState, FeedbackNotice, GroupedList, HeroCard, PrimaryButton, SectionTitle, SettingsRow, useFeedback, type FeedbackTone } from '../../src/ui';
 
 export default function ActivityScreen() {
   const { id, accountId } = useLocalSearchParams<{ id: string; accountId?: string }>(); const store = useVault(); const data = store.data;
@@ -21,7 +21,7 @@ export default function ActivityScreen() {
   async function refresh(manual = false) {
     if (!account || !activity) return; setBusy(true); setStatus({ tone: 'loading', message: '正在核对活动状态…' });
     try {
-      if (isDemoActivity(activity)) { setStatus({ tone: 'info', message: '本机模拟活动可反复演练，没有远端签到状态。' }); return; }
+      if (isDemoActivity(activity)) return;
       const session = await api.check(account.session);
       const detail = await api.detail(session, activity);
       let signed: boolean | null = null;
@@ -44,16 +44,16 @@ export default function ActivityScreen() {
     } catch (e) { const message = e instanceof Error ? e.message : '签退活动读取失败'; setStatus({ tone: 'error', message }); notify(message, 'error'); } finally { setBusy(false); }
   }
   const ended = activityPhase(activity) === 'ended';
-  const demo = isDemoActivity(activity);
   const requirement = activity.requirements ? [activity.requirements.captcha && '验证码', activity.requirements.face && '人脸', activity.requirements.location && '位置', activity.requirements.photo && '照片'].filter(Boolean).join('、') : '';
-  return <AppScreen title={activity.title} subtitle={account?.label} footer={!ended && activity.kind !== 'unknown' ? <PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })}>{demo ? '开始模拟签到' : '选择账号签到'}</PrimaryButton> : undefined}>
+  if (isDemoActivity(activity)) return <AppScreen title="活动已移除"><EmptyState title="该活动已移除" detail="请从课程列表打开当前签到活动" /></AppScreen>;
+  return <AppScreen title={activity.title} subtitle={account?.label} footer={!ended && activity.kind !== 'unknown' ? <PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })}>选择账号签到</PrimaryButton> : undefined}>
     {status && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <HeroCard eyebrow={demo ? '本机演练' : ended ? '已结束' : '进行中'} title={demo ? '可以反复练习' : activity.signed ? '你已签到' : ended ? '签到已结束' : '可以签到'} detail={demo ? '仅检查输入和任务流程，不会向学习通提交，也不会产生真实签到记录。' : ended ? undefined : '可选择账号，帮同学完成签到。'} />
+    <HeroCard eyebrow={ended ? '已结束' : '进行中'} title={activity.signed ? '你已签到' : ended ? '签到已结束' : '可以签到'} detail={ended ? undefined : '可选择账号，帮同学完成签到。'} />
     <SectionTitle>签到信息</SectionTitle><GroupedList>
       {!!activity.endTime && <SettingsRow title="截止时间" detail={new Date(activity.endTime).toLocaleString()} />}
       {!!requirement && <SettingsRow title="需要" detail={requirement} />}
       {activity.relation?.signOutId && <SettingsRow title="签退" detail={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? '尚未开始' : '点击查看'} onPress={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? undefined : () => { void openSignOut(); }} />}
     </GroupedList>
-    {!demo && <YStack marginTop={16}><PrimaryButton onPress={() => { void refresh(true); }} loading={busy} disabled={!account}>更新状态</PrimaryButton></YStack>}
+    <YStack marginTop={16}><PrimaryButton onPress={() => { void refresh(true); }} loading={busy} disabled={!account}>更新状态</PrimaryButton></YStack>
   </AppScreen>;
 }
