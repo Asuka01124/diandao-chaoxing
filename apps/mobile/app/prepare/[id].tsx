@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'react-native';
-import { Text, YStack } from 'tamagui';
+import { Text, XStack, YStack } from 'tamagui';
 import * as ImagePicker from 'expo-image-picker';
 import type { LocationInput, SignInput } from '@sign/shared';
 import { createJob, runJob } from '../../src/core/jobs';
@@ -12,7 +12,8 @@ import { DEMO_QR_PAYLOAD, isDemoActivity } from '../../src/features/courses/demo
 import { GesturePatternPicker } from '../../src/features/courses/gesture-pattern-picker';
 import { prepareErrorMessage } from '../../src/features/courses/prepare-error';
 import { MapPicker } from '../../src/features/location/map-picker';
-import { ReservedPhotoPicker } from '../../src/features/photos/reserved-photo-picker';
+import { ReservedPhotoRow } from '../../src/features/photos/reserved-photo-row';
+import { photoName } from '../../src/features/photos/photo-name';
 import { AppScreen, FeedbackNotice, GlassInput, GroupedList, HeroCard, Message, PrimaryButton, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
 
 export default function PrepareScreen() {
@@ -24,7 +25,7 @@ export default function PrepareScreen() {
   const [demoQrAt, setDemoQrAt] = useState<string | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [reservedPhotoId, setReservedPhotoId] = useState<string | null>(null);
-  const [reservedPickerOpen, setReservedPickerOpen] = useState(false);
+  const [photoLabel, setPhotoLabel] = useState('');
   const notify = useFeedback();
   useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   useEffect(() => { if (qrPayload) { setQr(qrPayload); setDemoQrAt(null); setError(''); } }, [qrPayload]);
@@ -54,7 +55,7 @@ export default function PrepareScreen() {
   }
   async function pickPhoto(camera: boolean) {
     const picked = camera ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.5 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 });
-    if (!picked.canceled) { setPhotoUri(picked.assets[0].uri); setReservedPhotoId(null); setError(''); notify('签到照片已选择', 'success'); }
+    if (!picked.canceled) { setPhotoUri(picked.assets[0].uri); setReservedPhotoId(null); setPhotoLabel(camera ? '本次拍摄照片' : '从相册选择的照片'); setError(''); notify('签到照片已选择', 'success'); }
     else notify('已取消选择照片', 'info');
   }
   async function start() {
@@ -94,16 +95,21 @@ export default function PrepareScreen() {
       {demo && <PrimaryButton onPress={() => { setQr(DEMO_QR_PAYLOAD); setDemoQrAt(new Date().toISOString()); setError(''); notify('模拟二维码已填入', 'success'); }}>使用模拟二维码</PrimaryButton>}
       <PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } })}>打开扫码</PrimaryButton></YStack></>}
     {activity.kind === 'photo' && <><SectionTitle>签到照片</SectionTitle><YStack gap={12}>
-      <Message>{photoUri ? demo ? '已选择照片；演练只在本机处理，不会上传' : '已选择照片，确认后将按账号分别上传' : '使用预留照片，或直接拍摄本次照片'}</Message>
-      {photoUri && <Image source={{ uri: photoUri }} resizeMode="cover" accessibilityLabel="当前选择的签到照片预览" style={{ width: '100%', height: 170, borderRadius: 16 }} />}
-      {data.settings.reservedPhotos.length ? <PrimaryButton onPress={() => setReservedPickerOpen(true)}>{`使用预留照片（${data.settings.reservedPhotos.length}）`}</PrimaryButton>
-        : <Message>暂无预留照片，可先在设置中添加，最多 10 张。</Message>}
-      <PrimaryButton onPress={() => { void pickPhoto(true).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>直接拍照</PrimaryButton>
-      <PrimaryButton onPress={() => { void pickPhoto(false).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>从相册选择</PrimaryButton>
-    </YStack><ReservedPhotoPicker visible={reservedPickerOpen} photos={data.settings.reservedPhotos} selectedId={reservedPhotoId}
-      onClose={() => setReservedPickerOpen(false)} onPick={photo => {
-        if (!reservedPhotoExists(photo.id)) { notify('这张预留照片已丢失，请在设置中删除后重新添加', 'error'); return; }
-        setReservedPhotoId(photo.id); setPhotoUri(reservedPhotoUri(photo.id)); setReservedPickerOpen(false); setError(''); notify('预留照片已选择', 'success');
-      }} /></>}
+      <Message>{photoUri ? demo ? '演练只在本机处理，不会上传照片' : '确认后将按账号分别上传这张照片' : '直接选择下方的预留照片，也可以拍摄或从相册选择'}</Message>
+      {photoUri && <GroupedList><XStack padding={14} alignItems="center" gap={13}>
+        <Image source={{ uri: photoUri }} resizeMode="cover" accessibilityLabel="当前选择的签到照片预览" style={{ width: 68, height: 68, borderRadius: 12 }} />
+        <YStack flex={1} gap={3}><Text color="$muted" fontSize={12}>当前选择</Text><Text color="$color" fontSize={16} fontWeight="600" numberOfLines={2}>{photoLabel}</Text></YStack>
+        <Text color="$brand" fontSize={22}>✓</Text>
+      </XStack></GroupedList>}
+      {!!data.settings.reservedPhotos.length && <><Text color="$muted" fontSize={14} marginLeft={4}>预留照片</Text><GroupedList>{data.settings.reservedPhotos.map((photo, index) =>
+        <ReservedPhotoRow key={photo.id} photo={photo} index={index} last={index === data.settings.reservedPhotos.length - 1}
+          selected={reservedPhotoId === photo.id} detail="轻点用于本次签到" onSelect={() => {
+            if (!reservedPhotoExists(photo.id)) { notify('这张预留照片已丢失，请在设置中删除后重新添加', 'error'); return; }
+            setReservedPhotoId(photo.id); setPhotoUri(reservedPhotoUri(photo.id)); setPhotoLabel(photoName(photo, index)); setError(''); notify('预留照片已选择', 'success');
+          }} />)}</GroupedList></>}
+      <XStack gap={10}><YStack flex={1}><PrimaryButton onPress={() => { void pickPhoto(true).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>直接拍照</PrimaryButton></YStack>
+        <YStack flex={1}><PrimaryButton onPress={() => { void pickPhoto(false).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>从相册选择</PrimaryButton></YStack></XStack>
+      {!data.settings.reservedPhotos.length && <Message>暂无预留照片，可在设置中添加，最多 10 张。</Message>}
+    </YStack></>}
   </AppScreen>;
 }

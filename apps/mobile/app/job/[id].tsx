@@ -10,7 +10,7 @@ import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } f
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { isDemoActivity } from '../../src/features/courses/demo-course';
-import { ReservedPhotoPicker } from '../../src/features/photos/reserved-photo-picker';
+import { ReservedPhotoRow } from '../../src/features/photos/reserved-photo-row';
 import { AppScreen, FeedbackNotice, GroupedList, HeroCard, Message, PrimaryButton, SectionTitle, SettingsRow, StatusBadge, useFeedback } from '../../src/ui';
 
 export default function JobScreen() {
@@ -78,7 +78,14 @@ export default function JobScreen() {
       return <YStack key={attempt.accountId}><SettingsRow title={account?.label ?? '已删除账号'} detail={`${attempt.message ?? ''}${attempt.count ? ` · ${demo ? '模拟' : '提交'} ${attempt.count} 次` : ''}`} accessory={<StatusBadge state={attempt.state} />} />
         {(attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED') && <YStack padding={12}>{actionButton(`retry-${attempt.accountId}`, '核查后重试', '正在核查并重试…', () => retryAttempt(store, id, attempt.accountId), attempt.accountId)}</YStack>}
         {attempt.state === 'FAILED' && job.input.kind === 'photo' && <YStack padding={12} gap={8}>
-          {!!data.settings.reservedPhotos.length && <PrimaryButton disabled={!!activeAction} onPress={() => setReservedPickerAccountId(attempt.accountId)}>使用预留照片并重试</PrimaryButton>}
+          {!!data.settings.reservedPhotos.length && <PrimaryButton disabled={!!activeAction} onPress={() => setReservedPickerAccountId(current => current === attempt.accountId ? null : attempt.accountId)}>{reservedPickerAccountId === attempt.accountId ? '收起预留照片' : '选择预留照片并重试'}</PrimaryButton>}
+          {reservedPickerAccountId === attempt.accountId && <GroupedList>{data.settings.reservedPhotos.map((photo, index) =>
+            <ReservedPhotoRow key={photo.id} photo={photo} index={index} last={index === data.settings.reservedPhotos.length - 1}
+              detail="轻点后为该账号重试" onSelect={() => {
+                if (!reservedPhotoExists(photo.id)) { notify('这张预留照片已丢失，请在设置中删除后重新添加', 'error'); return; }
+                setReservedPickerAccountId(null);
+                void runAction(`photo-reserved-${attempt.accountId}`, '正在处理预留照片…', () => retryWithPhoto(attempt.accountId, reservedPhotoUri(photo.id)), attempt.accountId);
+              }} />)}</GroupedList>}
           {actionButton(`photo-camera-${attempt.accountId}`, '拍摄新照片并重试', '正在处理照片…', () => providePhoto(attempt.accountId, true), attempt.accountId)}
           {actionButton(`photo-library-${attempt.accountId}`, '选择新照片并重试', '正在处理照片…', () => providePhoto(attempt.accountId, false), attempt.accountId)}
         </YStack>}
@@ -93,12 +100,5 @@ export default function JobScreen() {
     {attempts.some(a => a.state === 'WAITING_CAPTCHA' || a.state === 'WAITING_FACE') && <Message>第三方要求人工验证。可以在此提供该账号授权的人脸照片，或在官方客户端完成验证后核查状态。</Message>}
     {job.state === 'RUNNING' && <YStack marginTop={20}>{actionButton('continue', '继续未完成账号', '正在继续执行任务…', () => runJob(store, job.id))}</YStack>}
     {demo && job.state === 'DONE' && <YStack marginTop={20}><PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: job.activity.id, accountId: data.accounts.find(a => a.role === 'primary')?.id } })}>再演练一次</PrimaryButton></YStack>}
-    <ReservedPhotoPicker visible={!!reservedPickerAccountId} photos={data.settings.reservedPhotos} onClose={() => setReservedPickerAccountId(null)} onPick={photo => {
-      if (!reservedPickerAccountId) return;
-      if (!reservedPhotoExists(photo.id)) { notify('这张预留照片已丢失，请在设置中删除后重新添加', 'error'); return; }
-      const accountId = reservedPickerAccountId;
-      setReservedPickerAccountId(null);
-      void runAction(`photo-reserved-${accountId}`, '正在处理预留照片…', () => retryWithPhoto(accountId, reservedPhotoUri(photo.id)), accountId);
-    }} />
   </AppScreen>;
 }

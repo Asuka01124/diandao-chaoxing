@@ -7,7 +7,7 @@ import type { Account, Course } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { CourseCard } from '../../src/features/courses/course-card';
-import { demoCourse } from '../../src/features/courses/demo-course';
+import { courseKey, ongoingCourseKeys, prioritizeOngoingCourses } from '../../src/features/courses/course-priority';
 import { useVault } from '../../src/state';
 import { AppScreen, FeedbackNotice, GroupedList, type FeedbackTone } from '../../src/ui';
 
@@ -36,6 +36,7 @@ export default function CoursesScreen() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ message: string; tone: FeedbackTone } | null>(null);
   const sequence = useRef(0);
+  const checkedAt = useRef<Record<string, number>>({});
   const account = primaryAccount(data);
   const theme = useTheme();
 
@@ -49,16 +50,62 @@ export default function CoursesScreen() {
       const session = await api.check(current.session);
       await store.update(v => { const item = v.accounts.find(a => a.id === current.id); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } });
       const list = await api.courses(session);
-      if (request === sequence.current) {
-        setCourses(list);
-        setStatus({ tone: 'success', message: `刷新完成 · ${list.length} 门课程 · ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` });
+      if (request !== sequence.current) return;
+      setCourses(list);
+      const now = Date.now();
+      const cachedAt = new Map<string, number>();
+      for (const activity of store.get().activityCache) if (activity.cacheAccountId === current.id && activity.cachedAt != null) {
+        const key = courseKey({ id: activity.courseId, classId: activity.classId });
+        cachedAt.set(key, Math.max(cachedAt.get(key) ?? 0, activity.cachedAt));
       }
+      const pending = list.filter(course => {
+        const key = courseKey(course);
+        const lastChecked = Math.max(checkedAt.current[`${current.id}:${key}`] ?? 0, cachedAt.get(key) ?? 0);
+        return manual || now - lastChecked >= 5 * 60_000;
+      });
+      const scanned: { course: Course; activities: Awaited<ReturnType<typeof api.activities>> }[] = [];
+      let next = 0; let completed = 0; let failures = 0;
+      if (pending.length) {
+        setStatus({ tone: 'loading', message: `正在检查签到活动 · 0/${pending.length} 门课程` });
+        await Promise.all(Array.from({ length: Math.min(2, pending.length) }, async () => {
+          while (request === sequence.current) {
+            const course = pending[next++];
+            if (!course) return;
+            try {
+              const activities = await api.activities(session, course.id, course.classId);
+              if (request !== sequence.current) return;
+              scanned.push({ course, activities });
+              checkedAt.current[`${current.id}:${courseKey(course)}`] = Date.now();
+            } catch { failures++; }
+            completed++;
+            if (request === sequence.current) setStatus({ tone: 'loading', message: `正在检查签到活动 · ${completed}/${pending.length} 门课程` });
+          }
+        }));
+        if (request !== sequence.current) return;
+        if (scanned.length) await store.update(v => {
+          const scannedKeys = new Set(scanned.map(item => courseKey(item.course)));
+          const previous = new Map(v.activityCache.filter(activity => activity.cacheAccountId === current.id)
+            .map(activity => [`${activity.courseId}:${activity.classId}:${activity.id}`, activity] as const));
+          v.activityCache = [
+            ...v.activityCache.filter(activity => activity.cacheAccountId !== current.id || !scannedKeys.has(courseKey({ id: activity.courseId, classId: activity.classId }))),
+            ...scanned.flatMap(item => item.activities.map(activity => {
+              const older = previous.get(`${activity.courseId}:${activity.classId}:${activity.id}`);
+              if (older && (older.cachedAt ?? 0) > (activity.cachedAt ?? 0)) return older;
+              return { ...older, ...activity, kind: older?.requirements ? older.kind : activity.kind, cacheAccountId: current.id };
+            })),
+          ];
+        });
+      }
+      if (request !== sequence.current) return;
+      const activeKeys = ongoingCourseKeys(store.get().activityCache, current.id);
+      const activeCount = list.filter(course => activeKeys.has(courseKey(course))).length;
+      setStatus({ tone: failures ? 'info' : 'success', message: `${list.length} 门课程 · ${activeCount} 门有进行中的签到${failures ? ` · ${failures} 门未能检查` : ''}` });
     } catch (e) { if (request === sequence.current) setStatus({ tone: 'error', message: `课程读取失败：${e instanceof Error ? e.message : '请稍后重试'}` }); }
     finally { if (request === sequence.current) setBusy(false); }
   }
 
   if (!data || !account) return null;
-  const visibleCourses = [demoCourse, ...courses.filter(course => course.id !== demoCourse.id)];
+  const visibleCourses = prioritizeOngoingCourses(courses, data.activityCache, account.id);
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
     ? <GroupedList><Text color="$muted" fontSize={14} marginLeft={18} marginTop={16} marginBottom={9}>我的课程</Text>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
