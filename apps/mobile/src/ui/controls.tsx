@@ -15,10 +15,10 @@ export function SettingsRow({ title, detail, onPress, onLongPress, accessibility
     </XStack>
   </Pressable>;
 }
-export function PrimaryButton({ children, onPress, disabled, danger, loading }: { children: React.ReactNode; onPress: () => void; disabled?: boolean; danger?: boolean; loading?: boolean }) {
+export function PrimaryButton({ children, onPress, disabled, danger, loading }: { children: string; onPress: () => void; disabled?: boolean; danger?: boolean; loading?: boolean }) {
   const blocked = disabled || loading;
   return <Button backgroundColor={danger ? '$danger' : '$brand'} color="$onAccent" borderRadius={16} minHeight={52} fontSize={15} fontWeight="600" disabled={blocked} opacity={blocked ? 0.55 : 1}
-    accessibilityState={{ disabled: !!blocked, busy: !!loading }} pressStyle={{ opacity: 0.86, scale: 0.985 }} onPress={onPress}>
+    accessibilityLabel={children} accessibilityState={{ disabled: !!blocked, busy: !!loading }} pressStyle={{ opacity: 0.86, scale: 0.985 }} onPress={onPress}>
     {loading && <ActivityIndicator size="small" color="white" />}{children}
   </Button>;
 }

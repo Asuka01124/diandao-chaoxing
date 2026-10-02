@@ -73,7 +73,7 @@ export default function PrepareScreen() {
   const needsLocation = activity.kind === 'location' || activity.requirements?.location;
   return <AppScreen title={demo ? '准备模拟签到' : '准备签到'} subtitle={activity.title} footer={<YStack gap={8}>
     {!selected.length && <Message>请先选择至少一个账号</Message>}
-    <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>为 {selected.length} 个账号{demo ? '演练' : '签到'}</PrimaryButton>
+    <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>{`为 ${selected.length} 个账号${demo ? '演练' : '签到'}`}</PrimaryButton>
   </YStack>}>
     {!!error && <FeedbackNotice message={error} tone="error" />}
     <HeroCard eyebrow={demo ? '本机模拟' : '签到准备'} title={`${selected.length} 个账号已选择`} detail={demo ? '可检查选账号、填写信息和查看任务结果；不会向学习通提交。' : '确认参与账号，再补充本次签到要求的信息。'} />
@@ -89,7 +89,7 @@ export default function PrepareScreen() {
     {activity.kind === 'photo' && <><SectionTitle>签到照片</SectionTitle><YStack gap={12}>
       <Message>{photoUri ? demo ? '已选择照片；演练只在本机处理，不会上传' : '已选择照片，确认后将按账号分别上传' : '使用预留照片，或直接拍摄本次照片'}</Message>
       {photoUri && <Image source={{ uri: photoUri }} resizeMode="cover" accessibilityLabel="当前选择的签到照片预览" style={{ width: '100%', height: 170, borderRadius: 16 }} />}
-      {data.settings.reservedPhotos.length ? <PrimaryButton onPress={() => setReservedPickerOpen(true)}>使用预留照片（{data.settings.reservedPhotos.length}）</PrimaryButton>
+      {data.settings.reservedPhotos.length ? <PrimaryButton onPress={() => setReservedPickerOpen(true)}>{`使用预留照片（${data.settings.reservedPhotos.length}）`}</PrimaryButton>
         : <Message>暂无预留照片，可先在设置中添加，最多 10 张。</Message>}
       <PrimaryButton onPress={() => { void pickPhoto(true).catch(e => { const message = e instanceof Error ? e.message : '拍摄失败'; setError(message); notify(message, 'error'); }); }}>直接拍照</PrimaryButton>
       <PrimaryButton onPress={() => { void pickPhoto(false).catch(e => { const message = e instanceof Error ? e.message : '选图失败'; setError(message); notify(message, 'error'); }); }}>从相册选择</PrimaryButton>
