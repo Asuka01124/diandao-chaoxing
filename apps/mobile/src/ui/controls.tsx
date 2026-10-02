@@ -17,9 +17,13 @@ export function SettingsRow({ title, detail, onPress, onLongPress, accessibility
 }
 export function PrimaryButton({ children, onPress, disabled, danger, loading }: { children: string; onPress: () => void; disabled?: boolean; danger?: boolean; loading?: boolean }) {
   const blocked = disabled || loading;
-  return <Button backgroundColor={danger ? '$danger' : '$brand'} color="$onAccent" borderRadius={16} minHeight={52} fontSize={15} fontWeight="600" disabled={blocked} opacity={blocked ? 0.55 : 1}
-    accessibilityLabel={children} accessibilityState={{ disabled: !!blocked, busy: !!loading }} pressStyle={{ opacity: 0.86, scale: 0.985 }} onPress={onPress}>
-    {loading && <ActivityIndicator size="small" color="white" />}{children}
+  const theme = useTheme();
+  return <Button backgroundColor={danger ? '$danger' : '$actionSurface'} color={danger ? '$onAccent' : '$actionText'}
+    borderWidth={danger ? 0 : 1} borderColor="$actionBorder" borderRadius={20} minHeight={56} fontSize={16} fontWeight="500"
+    shadowColor="#000000" shadowOpacity={danger ? 0.08 : 0.1} shadowRadius={14} shadowOffset={{ width: 0, height: 5 }} elevation={4}
+    disabled={blocked} opacity={blocked ? 0.5 : 1}
+    accessibilityLabel={children} accessibilityState={{ disabled: !!blocked, busy: !!loading }} pressStyle={{ opacity: 0.72, scale: 0.985 }} onPress={onPress}>
+    {loading && <ActivityIndicator size="small" color={danger ? theme.onAccent.val : theme.actionText.val} />}{children}
   </Button>;
 }
 

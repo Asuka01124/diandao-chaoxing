@@ -31,9 +31,9 @@ export function GesturePatternPicker({ value, onChange }: { value: string; onCha
           accessibilityState={{ selected }} onPress={() => { if (!selected) onChange(value + digit); }}
           style={({ pressed }) => ({ position: 'absolute', left: (index % 3) * CELL, top: Math.floor(index / 3) * CELL,
             width: CELL, height: CELL, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.68 : 1 })}>
-          <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: selected ? 0 : 1.5, borderColor: theme.fieldBorder.val,
-            backgroundColor: selected ? theme.brand.val : theme.field.val, alignItems: 'center', justifyContent: 'center' }}>
-            <Text color={selected ? '$onAccent' : '$color'} fontSize={19} fontWeight="600">{digit}</Text>
+          <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: selected ? 2 : 1.5, borderColor: selected ? theme.brand.val : theme.fieldBorder.val,
+            backgroundColor: selected ? theme.actionSurface.val : theme.field.val, alignItems: 'center', justifyContent: 'center' }}>
+            <Text color={selected ? '$actionText' : '$color'} fontSize={19} fontWeight="600">{digit}</Text>
           </View>
           {selected && <View style={{ position: 'absolute', right: 5, top: 5, minWidth: 22, height: 22, borderRadius: 11,
             backgroundColor: theme.panel.val, borderWidth: 1, borderColor: theme.fieldBorder.val, alignItems: 'center', justifyContent: 'center' }}>
