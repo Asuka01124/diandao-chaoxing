@@ -49,6 +49,12 @@ $anchor = '    compileSdk rootProject.ext.compileSdkVersion'
 if ($originalText.Split(@($anchor), [StringSplitOptions]::None).Length -ne 2) {
     throw '原生 build.gradle 结构与脚本预期不同，已停止以免错误修改。'
 }
+$versionCodePattern = '(?m)^([ \t]*)versionCode[ \t]+\d+[ \t]*$'
+$versionNamePattern = '(?m)^([ \t]*)versionName[ \t]+["''][^"'']+["''][ \t]*$'
+if ([regex]::Matches($originalText, $versionCodePattern).Count -ne 1 -or
+    [regex]::Matches($originalText, $versionNamePattern).Count -ne 1) {
+    throw '原生 build.gradle 的版本字段与脚本预期不同，已停止以免错误修改。'
+}
 
 $cmakeConfig = @'
     // Temporary Windows short-path workaround; restored after the build.
@@ -93,6 +99,9 @@ try {
     $mapped = $true
 
     $patched = $originalText.Replace($anchor, $anchor + "`r`n" + $cmakeConfig.TrimEnd()) + "`r`n" + $cmakeHook
+    # 原生工程被忽略；每次构建临时同步 app.json 版本，并在 finally 恢复原文件。
+    $patched = [regex]::Replace($patched, $versionCodePattern, ('${1}versionCode ' + [string]$config.expo.android.versionCode))
+    $patched = [regex]::Replace($patched, $versionNamePattern, ('${1}versionName "' + $version + '"'))
     $modified = $true
     [IO.File]::WriteAllText($appGradle, $patched, (New-Object Text.UTF8Encoding($false)))
 

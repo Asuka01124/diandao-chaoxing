@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "到点", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "0.5.15-beta.1", "icon": "./assets/icon.png",
+    "name": "到点", "slug": "chaoxing-sign-tool", "scheme": "sign-tool", "version": "1.0.0", "icon": "./assets/icon.png",
     "orientation": "portrait", "userInterfaceStyle": "automatic", "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "dev.local.sign.tool" },
-    "android": { "package": "dev.local.sign.tool", "versionCode": 21, "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#FFFFFF" } },
+    "android": { "package": "dev.local.sign.tool", "versionCode": 22, "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#FFFFFF" } },
     "plugins": ["expo-router", "expo-secure-store", ["expo-splash-screen", { "backgroundColor": "#FFFFFF", "image": "./assets/icon.png", "imageWidth": 160 }], ["expo-camera", { "cameraPermission": "用于扫描签到二维码", "recordAudioAndroid": false }], ["expo-image-picker", { "photosPermission": "用于选择签到照片", "cameraPermission": "用于拍摄签到照片" }]],
     "experiments": { "typedRoutes": true }
   }
