@@ -18,7 +18,7 @@ export function AppScreen({ title, subtitle, headerAction, children, footer }: {
           {children}
         </YStack>
       </ScrollView>
-      {footer && <YStack backgroundColor="$panel" paddingHorizontal={22} paddingTop={13} paddingBottom={12}>
+      {footer && <YStack backgroundColor="$background" paddingHorizontal={22} paddingTop={13} paddingBottom={12}>
         <YStack width="100%" maxWidth={680} alignSelf="center">{footer}</YStack>
       </YStack>}
     </YStack>
