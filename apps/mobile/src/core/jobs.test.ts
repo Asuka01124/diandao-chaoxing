@@ -1,5 +1,6 @@
 import { beforeEach, expect, mock, test } from 'bun:test';
-import { emptyVault, type Activity, type ProviderSession, type VaultData } from '@sign/shared';
+import { emptyVault, type Activity, type ProviderSession, type SignInput, type VaultData } from '@sign/shared';
+import { demoActivities } from '../features/courses/demo-course';
 
 let counter = 0;
 mock.module('expo-crypto', () => ({ randomUUID: () => `job-${++counter}` }));
@@ -11,15 +12,16 @@ const behavior = {
   upload: async (_id: string): Promise<{ mediaId: string }> => ({ mediaId: 'image' }),
 };
 const clearedPhotos: string[] = [];
+const providerCalls: string[] = [];
 mock.module('./media', () => ({ readStagedPhoto: async () => 'jpeg-base64', clearStagedPhoto: (uri: string) => { clearedPhotos.push(uri); } }));
 mock.module('./api', () => ({
   ClientError: FakeClientError,
   api: {
-    check: async (s: ProviderSession) => s,
-    status: async (s: ProviderSession) => behavior.status(s.userId),
-    preflight: async (s: ProviderSession) => behavior.preflight(s.userId),
-    submit: async (s: ProviderSession) => behavior.submit(s.userId),
-    upload: async (s: ProviderSession) => behavior.upload(s.userId),
+    check: async (s: ProviderSession) => { providerCalls.push('check'); return s; },
+    status: async (s: ProviderSession) => { providerCalls.push('status'); return behavior.status(s.userId); },
+    preflight: async (s: ProviderSession) => { providerCalls.push('preflight'); return behavior.preflight(s.userId); },
+    submit: async (s: ProviderSession) => { providerCalls.push('submit'); return behavior.submit(s.userId); },
+    upload: async (s: ProviderSession) => { providerCalls.push('upload'); return behavior.upload(s.userId); },
   },
 }));
 const { createJob, runJob, replaceQrAndResume, provideFaceAndResume, retryAttempt } = await import('./jobs');
@@ -31,7 +33,29 @@ function store() {
   data.accounts = ['a', 'b'].map(id => ({ id, label: id, role: id === 'a' ? 'primary' as const : 'delegate' as const, session: session(id), authorizedAt: '', state: 'VALID' }));
   return { get: () => data, update: async (change: (value: VaultData) => void) => { const next = structuredClone(data); change(next); data = next; } };
 }
-beforeEach(() => { counter = 0; clearedPhotos.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.preflight = async () => ({ state: 'READY' }); behavior.upload = async () => ({ mediaId: 'image' }); });
+beforeEach(() => { counter = 0; clearedPhotos.length = 0; providerCalls.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.preflight = async () => ({ state: 'READY' }); behavior.upload = async () => ({ mediaId: 'image' }); });
+
+test('六种测试签到只生成本机结果，不调用学习通接口', async () => {
+  const state = store();
+  const inputs: SignInput[] = [
+    { kind: 'click' },
+    { kind: 'location', latitude: 34.8, longitude: 113.6, address: '测试位置' },
+    { kind: 'photo', mediaIdByAccount: {} },
+    { kind: 'qr', qrPayload: 'daodian://demo/qr-check-in', scannedAt: new Date().toISOString() },
+    { kind: 'code', code: '1234' },
+    { kind: 'gesture', sequence: '1234' },
+  ];
+  for (const [index, activity] of demoActivities().entries()) {
+    const job = await createJob(state, activity, ['a', 'b'], inputs[index], index === 2 ? 'file:///cache/demo-photo.jpg' : undefined);
+    await runJob(state, job.id);
+  }
+  expect(providerCalls).toEqual([]);
+  expect(state.get().attempts).toHaveLength(12);
+  expect(state.get().attempts.every(attempt => attempt.state === 'SUCCESS' && attempt.message?.includes('没有签到记录'))).toBe(true);
+  expect(state.get().jobs.every(job => job.state === 'DONE')).toBe(true);
+  expect(state.get().activityCache).toEqual([]);
+  expect(clearedPhotos).toEqual(['file:///cache/demo-photo.jpg']);
+});
 
 test('一个账号失败不丢失另一个账号的结果', async () => {
   const state = store(); const submitted = new Set<string>();

@@ -7,6 +7,7 @@ import type { Activity } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { activityPhase } from '../../src/features/courses/activity-phase';
+import { demoActivities, isDemoCourse } from '../../src/features/courses/demo-course';
 import { useVault } from '../../src/state';
 import { AppScreen, EmptyState, FeedbackNotice, GroupedList, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
 
@@ -26,6 +27,16 @@ export default function CourseActivitiesScreen() {
     if (!account || !id || !classId) return;
     setBusy(true); setError('');
     try {
+      if (isDemoCourse(id)) {
+        const activities = demoActivities();
+        await store.update(v => {
+          v.activityCache = [...v.activityCache.filter(a => a.cacheAccountId !== account.id || !isDemoCourse(a.courseId)),
+            ...activities.map(a => ({ ...a, cacheAccountId: account.id }))];
+        });
+        setList(activities);
+        if (manual) notify('模拟活动已重置，可再次演练', 'success');
+        return;
+      }
       const session = await api.check(account.session);
       const activities = await api.activities(session, id, classId);
       await store.update(v => {
@@ -43,20 +54,22 @@ export default function CourseActivitiesScreen() {
     finally { setBusy(false); }
   }
   if (!data || !primaryAccount(data)) return null;
+  const demo = isDemoCourse(id);
   const ongoing = list.filter(a => activityPhase(a) === 'ongoing');
   const ended = list.filter(a => activityPhase(a) === 'ended');
   const rows = (items: Activity[], emptyTitle: string) => <GroupedList>{items.length ? items.map(a => <SettingsRow key={a.id} title={a.title}
-    detail={a.signed ? '我已签到' : a.startTime ? new Date(a.startTime).toLocaleString() : undefined}
+    detail={demo ? '本机演练 · 点击开始' : a.signed ? '我已签到' : a.startTime ? new Date(a.startTime).toLocaleString() : undefined}
     symbol="✓" onPress={() => router.push({ pathname: '/activity/[id]', params: { id: a.id, accountId: account?.id } })} />)
     : <EmptyState title={busy ? '正在读取…' : emptyTitle} />}</GroupedList>;
   return <AppScreen title={name || '课程签到'} headerAction={<Pressable accessibilityRole="button" accessibilityLabel={busy ? '正在刷新签到活动' : '刷新签到活动'} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void refresh(true); }}
     style={({ pressed }) => ({ width: 52, height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.panel.val, opacity: busy ? 0.65 : pressed ? 0.6 : 1, shadowColor: '#000000', shadowOpacity: 0.05, shadowRadius: 13, shadowOffset: { width: 0, height: 4 }, elevation: 2 })}>
     {busy ? <ActivityIndicator size="small" color={theme.brand.val} /> : <Svg width={23} height={23} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Path d="M20 11a8 8 0 1 1-2.5-5.8M20 4v6h-6" stroke={theme.muted.val} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
   </Pressable>}>
+    {demo && <FeedbackNotice message="这是本机模拟课程。可反复练习六种签到流程，不会向学习通提交，也不会产生真实签到记录。" tone="info" />}
     {!!error && <FeedbackNotice message={error} tone="error" />}
     {(!error || list.length > 0) && <>
       <SectionTitle>进行中</SectionTitle>{rows(ongoing, '暂无进行中的签到')}
-      <SectionTitle>已结束</SectionTitle>{rows(ended, '暂无已结束的签到')}
+      {!demo && <><SectionTitle>已结束</SectionTitle>{rows(ended, '暂无已结束的签到')}</>}
     </>}
   </AppScreen>;
 }

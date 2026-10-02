@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { validateActivityInput, type Account, type Activity, type AttemptState, type Job, type SignInput, type VaultData } from '@sign/shared';
 import { api, ClientError } from './api';
+import { isDemoActivity } from '../features/courses/demo-course';
 
 export type VaultAccess = { get: () => VaultData; update: (change: (data: VaultData) => void) => Promise<void> };
 const terminal: AttemptState[] = ['SUCCESS', 'ALREADY_SIGNED', 'REAUTH_REQUIRED', 'EXPIRED', 'FAILED'];
@@ -31,6 +32,13 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
   if (!account) { await setAttempt(store, job.id, accountId, 'FAILED', '账号已删除', 'INVALID_INPUT'); return 'continue'; }
   const previous = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId)?.state;
   try {
+    if (isDemoActivity(job.activity)) {
+      await setAttempt(store, job.id, accountId, 'PREFLIGHT', '正在核对本机演练输入');
+      await setAttempt(store, job.id, accountId, 'SUBMITTING', '仅本机模拟，不向学习通提交');
+      await setAttempt(store, job.id, accountId, 'VERIFYING', '正在生成模拟结果');
+      await setAttempt(store, job.id, accountId, 'SUCCESS', '本机演练通过；学习通没有签到记录');
+      return 'continue';
+    }
     await setAttempt(store, job.id, accountId, 'PREFLIGHT');
     const session = await api.check(account.session);
     await store.update(data => { const item = data.accounts.find(a => a.id === accountId); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } });

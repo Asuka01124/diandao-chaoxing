@@ -4,9 +4,14 @@
 
 ## 下载与安装
 
-- [在 GitHub Releases 下载 Android arm64 APK](https://github.com/Asuka01124/diandao-chaoxing/releases/latest)。当前版本为 v0.5.14。
+- [下载正式版 Android arm64 APK](https://github.com/Asuka01124/diandao-chaoxing/releases/latest)。当前正式版为 v0.5.14。
+- [下载签到演练测试版 v0.5.15-beta.1](https://github.com/Asuka01124/diandao-chaoxing/releases/tag/v0.5.15-beta.1)。
 - 在 Android 手机上安装 APK，首次打开按提示登录学习通账号。普通使用无需安装 Node.js、Bun 或 Android SDK。
 - 应用包名为 `dev.local.sign.tool`；使用相同签名的旧版可以覆盖安装。
+
+### 测试课程
+
+测试版的课程页顶部固定显示“签到测试课程”，内含普通、位置、照片、二维码、签到码和手势六类进行中的模拟活动。选一项后可走准备签到、选账号、填写资料和查看任务结果的完整界面流程；二维码可直接填入模拟码。测试结果会标明“本机演练”，不会向学习通提交，也不会生成真实签到记录。可返回测试课程反复练习；验证真实提交仍需学习通课程里有实际进行中的签到。
 
 ## 运行
 

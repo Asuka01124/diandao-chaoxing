@@ -1,5 +1,6 @@
 import type { Activity, Course, ProviderSession, SignInput, SignStatus } from '@sign/shared';
 import * as provider from '@sign/provider-adapter';
+import { isDemoActivity, isDemoCourse } from '../features/courses/demo-course';
 
 export class ClientError extends Error {
   constructor(public code: string, message: string, public retryable = false) { super(message); }
@@ -18,10 +19,20 @@ export const api = {
   check: (session: ProviderSession) => direct(() => provider.checkSession(session)),
   courses: (session: ProviderSession) => direct<Course[]>(() => provider.courses(session)),
   courseCover: (session: ProviderSession, imageUrl: string) => direct(() => provider.courseCover(session, imageUrl)),
-  activities: (session: ProviderSession, courseId: string, classId: string) => direct(() => provider.activities(session, courseId, classId)),
-  detail: (session: ProviderSession, activity: Activity) => direct(() => provider.activityDetail(session, activity)),
-  preflight: (session: ProviderSession, activity: Activity) => direct<SignStatus>(() => provider.preflight(session, activity)),
-  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string) => direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId)),
-  status: (session: ProviderSession, activity: Activity) => direct<SignStatus>(() => provider.signStatus(session, activity)),
+  activities: (session: ProviderSession, courseId: string, classId: string) => isDemoCourse(courseId)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试课程不读取学习通活动'))
+    : direct(() => provider.activities(session, courseId, classId)),
+  detail: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不读取学习通详情'))
+    : direct(() => provider.activityDetail(session, activity)),
+  preflight: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不请求学习通签到'))
+    : direct<SignStatus>(() => provider.preflight(session, activity)),
+  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string) => isDemoActivity(activity)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不可提交到学习通'))
+    : direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId)),
+  status: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动没有学习通签到状态'))
+    : direct<SignStatus>(() => provider.signStatus(session, activity)),
   upload: (session: ProviderSession, jpegBase64: string) => direct(() => provider.uploadPhoto(session, jpegBase64)),
 };

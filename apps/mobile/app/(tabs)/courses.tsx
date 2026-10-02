@@ -7,8 +7,9 @@ import type { Account, Course } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { CourseCard } from '../../src/features/courses/course-card';
+import { demoCourse } from '../../src/features/courses/demo-course';
 import { useVault } from '../../src/state';
-import { AppScreen, EmptyState, FeedbackNotice, GroupedList, type FeedbackTone } from '../../src/ui';
+import { AppScreen, FeedbackNotice, GroupedList, type FeedbackTone } from '../../src/ui';
 
 type CourseLayout = 'list' | 'grid';
 
@@ -57,11 +58,12 @@ export default function CoursesScreen() {
   }
 
   if (!data || !account) return null;
+  const visibleCourses = [demoCourse, ...courses.filter(course => course.id !== demoCourse.id)];
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
-    ? <GroupedList><Text color="$muted" fontSize={14} marginLeft={18} marginTop={16} marginBottom={9}>我的课程</Text>{courses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} last={index === courses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
-    : <YStack gap={12}>{Array.from({ length: Math.ceil(courses.length / 2) }, (_, index) => {
-      const pair = courses.slice(index * 2, index * 2 + 2);
+    ? <GroupedList><Text color="$muted" fontSize={14} marginLeft={18} marginTop={16} marginBottom={9}>我的课程</Text>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
+    : <YStack gap={12}>{Array.from({ length: Math.ceil(visibleCourses.length / 2) }, (_, index) => {
+      const pair = visibleCourses.slice(index * 2, index * 2 + 2);
       return <XStack key={pair[0].id + '-' + pair[0].classId} gap={12}>
         {pair.map(course => <YStack key={`${course.id}-${course.classId}`} flex={1}><CourseCard course={course} session={account.session} layout="grid" onPress={() => openCourse(course)} /></YStack>)}
         {pair.length === 1 && <YStack flex={1} />}
@@ -81,6 +83,6 @@ export default function CoursesScreen() {
       </Pressable>
     </XStack>
     {status && <YStack marginTop={13}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <YStack marginTop={13}>{courses.length ? courseCards : <GroupedList><EmptyState title={busy ? '正在读取课程' : '暂无课程'} detail={busy ? '请稍候' : '点击上方刷新按钮重试'} /></GroupedList>}</YStack>
+    <YStack marginTop={13}>{courseCards}</YStack>
   </AppScreen>;
 }
