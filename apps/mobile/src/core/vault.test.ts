@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { beforeEach, expect, test } from 'bun:test';
 import { emptyVault, type Account, type VaultData } from '@sign/shared';
 import { EncryptedVault, type VaultPorts } from './vault-core';
+import { demoActivities } from '../features/courses/demo-course';
 
 const files = new Map<string, Uint8Array>();
 let key: string | null = null;
@@ -73,6 +74,27 @@ test('旧版本机资料缺少预留照片列表时自动补齐', async () => {
   loaded.settings.reservedPhotos.push({ id: 'photo-1', createdAt: '2026-10-02T00:00:00.000Z' });
   await vault.write(loaded);
   expect((await vault.read()).settings.reservedPhotos).toHaveLength(1);
+});
+
+test('升级后旧演练活动和任务不再出现在正式数据中', async () => {
+  const vault = new EncryptedVault(ports);
+  const data = emptyVault();
+  const demo = demoActivities()[0];
+  const real = { ...demo, id: 'real-activity', courseId: 'real-course', classId: 'real-class' };
+  data.activityCache = [demo, real];
+  data.jobs = [
+    { id: 'demo-job', activity: demo, input: { kind: 'click' }, accountIds: ['alice'], createdAt: '', state: 'DONE' },
+    { id: 'real-job', activity: real, input: { kind: 'click' }, accountIds: ['alice'], createdAt: '', state: 'DONE' },
+  ];
+  data.attempts = [
+    { jobId: 'demo-job', accountId: 'alice', state: 'SUCCESS', count: 1, updatedAt: '' },
+    { jobId: 'real-job', accountId: 'alice', state: 'SUCCESS', count: 1, updatedAt: '' },
+  ];
+  await vault.write(data);
+  const loaded = await vault.read();
+  expect(loaded.activityCache.map(activity => activity.id)).toEqual(['real-activity']);
+  expect(loaded.jobs.map(job => job.id)).toEqual(['real-job']);
+  expect(loaded.attempts.map(attempt => attempt.jobId)).toEqual(['real-job']);
 });
 
 test('只剩备份文件时替换中断仍可恢复原资料', async () => {

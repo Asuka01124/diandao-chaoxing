@@ -7,6 +7,7 @@ import type { Activity } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { activityPhase } from '../../src/features/courses/activity-phase';
+import { isDemoCourse } from '../../src/features/courses/demo-course';
 import { useVault } from '../../src/state';
 import { AppScreen, EmptyState, FeedbackNotice, GroupedList, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
 
@@ -23,7 +24,7 @@ export default function CourseActivitiesScreen() {
   useEffect(() => { if (account && id && classId) void refresh(); }, [account?.id, id, classId]);
 
   async function refresh(manual = false) {
-    if (!account || !id || !classId) return;
+    if (!account || !id || !classId || isDemoCourse(id)) return;
     setBusy(true); setError('');
     try {
       const session = await api.check(account.session);
@@ -43,6 +44,7 @@ export default function CourseActivitiesScreen() {
     finally { setBusy(false); }
   }
   if (!data || !primaryAccount(data)) return null;
+  if (isDemoCourse(id)) return <AppScreen title="课程已移除"><EmptyState title="测试课程已移除" detail="请返回课程列表，选择学习通课程" /></AppScreen>;
   const ongoing = list.filter(a => activityPhase(a) === 'ongoing');
   const ended = list.filter(a => activityPhase(a) === 'ended');
   const rows = (items: Activity[], emptyTitle: string) => <GroupedList>{items.length ? items.map(a => <SettingsRow key={a.id} title={a.title}

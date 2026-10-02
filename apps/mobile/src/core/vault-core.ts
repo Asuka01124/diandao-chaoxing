@@ -1,4 +1,5 @@
 import { emptyVault, type VaultData } from '@sign/shared';
+import { isDemoCourse } from '../features/courses/demo-course';
 
 export type VaultPorts = {
   key: { get: () => Promise<string | null>; set: (hex: string) => Promise<void>; delete: () => Promise<void> };
@@ -37,6 +38,11 @@ export class EncryptedVault {
         data.accounts = data.accounts.map((account, index) => ({ ...account, role: index === 0 ? 'primary' : 'delegate' }));
         data.schemaVersion = 2;
       }
+      // 旧测试版的演练记录只存在本机。升级后隐藏它们，避免误出现在正式课程和任务中。
+      const removedJobIds = new Set(data.jobs.filter(job => isDemoCourse(job.activity.courseId)).map(job => job.id));
+      data.jobs = data.jobs.filter(job => !removedJobIds.has(job.id));
+      data.attempts = data.attempts.filter(attempt => !removedJobIds.has(attempt.jobId));
+      data.activityCache = (data.activityCache ?? []).filter(activity => !isDemoCourse(activity.courseId));
       return { ...data, schemaVersion: 2 };
     } catch { throw new Error('加密文件校验失败，无法读取任何账号资料'); }
   }
