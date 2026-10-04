@@ -93,3 +93,12 @@ APK、对照包、日志和临时对比脚本均被 Git 忽略，不纳入提交
 - R8 mapping、seeds、usage、configuration、resources 报告备份于被忽略的 `.tooling/r8-release-20261004/`，用于诊断运行时问题；APK 和报告不提交。
 
 关闭本轮裁剪：将 `config/android-packaging.json` 中 `android.enableMinifyInReleaseBuilds` 和 `android.enableShrinkResourcesInReleaseBuilds` 都设为 `"false"` 后重新运行标准打包脚本。保留第一轮两个压缩开关即可恢复无损压缩策略。也可回滚本轮独立 Git 提交，上一轮稳定提交为 `8ec6888`。不要用清空应用数据来回退。
+
+## 1.1 版本验证（2026-10-04）
+
+- `apps/mobile/app.json` 中版本名更新为 `1.1`，Android 版本码由 23 递增至 24；README 同步仓库版本说明，下载链接仍指向 GitHub 最新已发布版本。
+- 安装包 `daodian-v1.1-arm64.apk`：41,232,749 字节（41.23 MB），日志 `.tooling/build-apk-20261004-175643.log` 为 `BUILD SUCCESSFUL in 4m 20s`。
+- 脚本验证包名 `dev.local.sign.tool`、实际版本 `1.1`/`24`、arm64 架构和原签名证书均通过；16 KB ZIP 对齐验证通过。可覆盖升级现有版本，未做真机运行回归。
+- 与上轮 1.0.1 R8 APK 对照：19,359 个 DEX 类保持，29 个原生库和 Hermes 包逐字节一致，应用 assets 仅 `app.config` 变化；JSON 对比确认只变更版本名与 Android 版本码。
+- SHA-256：`2395cfc229e60614a8401d96391336f15620597ff34f267241f259507f6067c2`。R8 报告备份于 `.tooling/r8-v1.1/`。
+- 升级至版本码 24 后，旧 1.0.1 APK（版本码 23）不能普通覆盖降级。若要回退 R8 策略，应保留当前版本码，关闭两项裁剪开关后重新打包，以保留应用数据。
