@@ -1,4 +1,6 @@
 {
   "expo.useLegacyPackaging": "true",
-  "android.enableBundleCompression": "true"
+  "android.enableBundleCompression": "true",
+  "android.enableMinifyInReleaseBuilds": "true",
+  "android.enableShrinkResourcesInReleaseBuilds": "true"
 }

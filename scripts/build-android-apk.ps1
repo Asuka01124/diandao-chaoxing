@@ -38,7 +38,7 @@ $config = Get-Content -LiteralPath (Join-Path $mobile 'app.json') -Raw -Encoding
 $version = $config.expo.version
 $packaging = Get-Content -LiteralPath (Join-Path $mobile 'config/android-packaging.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $packagingArgs = @($packaging.PSObject.Properties | ForEach-Object {
-    if ($_.Name -notin @('expo.useLegacyPackaging', 'android.enableBundleCompression') -or $_.Value -notin @('true', 'false')) {
+    if ($_.Name -notin @('expo.useLegacyPackaging', 'android.enableBundleCompression', 'android.enableMinifyInReleaseBuilds', 'android.enableShrinkResourcesInReleaseBuilds') -or $_.Value -notin @('true', 'false')) {
         throw "不支持的 APK 压缩配置：$($_.Name)"
     }
     "-P$($_.Name)=$($_.Value)"
@@ -52,6 +52,8 @@ $logDir = Join-Path $repo '.tooling'
 $log = Join-Path $logDir ("build-apk-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
 $originalBytes = [IO.File]::ReadAllBytes($appGradle)
 $originalText = [Text.Encoding]::UTF8.GetString($originalBytes)
+$buildText = (& node (Join-Path $mobile 'plugins/android-r8-gradle.js') $appGradle) -join "`n"
+if ($LASTEXITCODE -ne 0) { throw '无法注入持久化 R8 规则；原生工程未修改。' }
 $anchor = '    compileSdk rootProject.ext.compileSdkVersion'
 if ($originalText.Split(@($anchor), [StringSplitOptions]::None).Length -ne 2) {
     throw '原生 build.gradle 结构与脚本预期不同，已停止以免错误修改。'
@@ -105,7 +107,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "无法建立 ${drive}: 短路径映射。" }
     $mapped = $true
 
-    $patched = $originalText.Replace($anchor, $anchor + "`r`n" + $cmakeConfig.TrimEnd()) + "`r`n" + $cmakeHook
+    $patched = $buildText.Replace($anchor, $anchor + "`r`n" + $cmakeConfig.TrimEnd()) + "`r`n" + $cmakeHook
     # 原生工程被忽略；每次构建临时同步 app.json 版本，并在 finally 恢复原文件。
     $patched = [regex]::Replace($patched, $versionCodePattern, ('${1}versionCode ' + [string]$config.expo.android.versionCode))
     $patched = [regex]::Replace($patched, $versionNamePattern, ('${1}versionName "' + $version + '"'))

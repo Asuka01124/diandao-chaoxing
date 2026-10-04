@@ -64,3 +64,32 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-android-apk.ps1
 - 优化包 SHA-256：`fe4bdb5efddb5966834a7d741d123fb5b4b45252aa3cdd8126c367e9805fe6a8`。
 
 APK、对照包、日志和临时对比脚本均被 Git 忽略，不纳入提交。
+
+## R8 与资源裁剪（第二轮，2026-10-04）
+
+第二轮在第一轮无损压缩基础上启用 `android.enableMinifyInReleaseBuilds` 与 `android.enableShrinkResourcesInReleaseBuilds`，替换默认规则为 `proguard-android-optimize.txt`。业务/界面源码和依赖版本未修改。`android-r8.pro` 禁止类/方法改名，并保留高德（含新版 `com.amap.location`）、Expo、Fabric UI、SVG、安全区与动画模块，保留动态调用需要的注解和泛型信息。各依赖自己的 consumer 规则仍正常参与 R8。
+
+`plugins/android-r8-gradle.js` 为本地 PowerShell 构建和 Expo 插件提供同一份 Gradle 转换，挂载版本管理内的规则及资源目录；生成工程仍在脚本退出时按原字节恢复。`config/android-resources/raw/diandao_visual_keep.xml` 保留 drawable、mipmap、font、raw 资源，保护 JS/高德按名字动态加载的图片和字体。
+
+### 实际诊断与修复
+
+| 最早实际问题 | 根因与证据 | 修复 |
+| --- | --- | --- |
+| `minifyReleaseWithR8` 报缺少 `com.amap.ams.gnss.GnssSoftLocator`、`net.jafama.FastMath`；日志 `.tooling/build-apk-20261004-173050.log` | 现有高德组合 SDK 引用了未随包提供的可选类；DEX 检查确认上一轮 53.45 MB APK 中也没有这两个类，非本轮误裁剪。 | 仅采用 `missing_rules.txt` 建议的两个精确 `-dontwarn`，并扩大保留范围至 `com.amap.**`，保护新版定位 JNI 类。随后 `.tooling/build-apk-20261004-173632.log` 构建通过（4m 23s）；没有使用全局 `-ignorewarnings`。 |
+| 首次通过的 R8 包在资源名称比对时缺少 20 个 drawable/raw 名称 | 自建 `raw/keep.xml` 与 Metro 生成的同名文件冲突，资源合并时后者覆盖了前者。唯一图片/字体内容哈希均未丢失，但 24 份重复文件以及若干动态资源名称被裁剪，不能据此宣称完整保留。 | 将自建文件改为唯一名 `raw/diandao_visual_keep.xml`，重新构建并复核全部视觉资源名称和文件内容。 |
+
+规则依据：[Android R8 文档](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization)、[动态资源保留与唯一文件名](https://developer.android.com/topic/performance/app-optimization/customize-which-resources-to-keep)、[高德保留规则](https://lbs.amap.com/api/android-location-sdk/guide/create-project/dev-attention)。
+
+### 最终结果与回滚
+
+- 最终 APK：`daodian-v1.0.1-r8-arm64.apk`，41,232,749 字节（41.23 MB / 39.32 MiB）。相较上一轮 53,452,457 字节，再减少 12,219,708 字节（22.86%）；相较最初 91,361,600 字节，共减少 50,128,851 字节（54.87%）。上一轮 `daodian-v1.0.1-compact-arm64.apk` 保留，可直接用于覆盖回退。
+- 日志 `.tooling/build-apk-20261004-174339.log`：`BUILD SUCCESSFUL in 3m 51s`。DEX 压缩存储从约 19.90 MB 降为 7.91 MB，DEX 类数由 44,566 降为 19,359。
+- 与上一轮 APK 对比：全部 29 个 `.so`、Hermes JavaScript 包、应用 assets（排除会随 DEX 重建的基线 profile）内容逐字节一致，没有删除业务资产。
+- drawable/mipmap/font/raw 名称去重后为 265 个，前后完全保留；排除构建用的 `raw/keep`、`raw/diandao_visual_keep` 控制文件。273 份 PNG/WebP/JPEG/TTF/OTF 文件的 SHA-256 多重集合完全一致，包含重复副本。
+- DEX 校验：上述保留命名空间中的所有非合成类均保留原名；旧 D8 编译器合成辅助类按 DEX `ACC_SYNTHETIC` 标志排除。最终 `configuration.txt` 确认持久化自定义规则和各依赖 consumer 规则均被加载。
+- 包名、版本名、版本码、arm64 架构和旧签名验证通过；16 KB ZIP 对齐验证通过。SHA-256：`a23fb7ac25d0fd1fbd87af606a2fba61a3d8729945fd5714edc289e491f5e19c`。
+- `bun run test`：57 项通过、0 项失败。Expo introspect 验证 4 项 Gradle 开关；appBuildGradle 模块回调验证自定义规则/资源路径，转换重复执行稳定。注意 Expo introspect 不会输出 appBuildGradle 内容，不能用缺少该输出判定插件无效。
+- 未连接 Android 设备，未进行 release 真机安装、启动、地图/定位、扫码、相机/照片以及页面截图回归。上述静态校验和 JS 测试不能替代原生运行时验证；本轮为待真机验收的优化包。
+- R8 mapping、seeds、usage、configuration、resources 报告备份于被忽略的 `.tooling/r8-release-20261004/`，用于诊断运行时问题；APK 和报告不提交。
+
+关闭本轮裁剪：将 `config/android-packaging.json` 中 `android.enableMinifyInReleaseBuilds` 和 `android.enableShrinkResourcesInReleaseBuilds` 都设为 `"false"` 后重新运行标准打包脚本。保留第一轮两个压缩开关即可恢复无损压缩策略。也可回滚本轮独立 Git 提交，上一轮稳定提交为 `8ec6888`。不要用清空应用数据来回退。
