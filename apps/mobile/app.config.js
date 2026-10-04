@@ -5,6 +5,7 @@ module.exports = {
     ...base,
     plugins: [
       ...base.plugins,
+      './plugins/with-android-packaging',
       ['expo-gaode-map', {
         androidKey: process.env.AMAP_ANDROID_KEY?.trim(),
         iosKey: process.env.AMAP_IOS_KEY?.trim(),

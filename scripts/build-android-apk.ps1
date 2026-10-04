@@ -36,6 +36,13 @@ if (-not $drive) { throw 'X: 到 T: 均已占用，无法为 CMake 建立短路�
 
 $config = Get-Content -LiteralPath (Join-Path $mobile 'app.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $version = $config.expo.version
+$packaging = Get-Content -LiteralPath (Join-Path $mobile 'config/android-packaging.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$packagingArgs = @($packaging.PSObject.Properties | ForEach-Object {
+    if ($_.Name -notin @('expo.useLegacyPackaging', 'android.enableBundleCompression') -or $_.Value -notin @('true', 'false')) {
+        throw "不支持的 APK 压缩配置：$($_.Name)"
+    }
+    "-P$($_.Name)=$($_.Value)"
+})
 $commit = (& git -C $repo rev-parse --short HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw '无法读取 Git 提交号。' }
 if (-not $OutputPath) { $OutputPath = Join-Path $repo "daodian-v$version-$commit-arm64.apk" }
@@ -121,7 +128,7 @@ try {
         $previousPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         try {
-            & $gradle.FullName ':app:assembleRelease' '-PreactNativeArchitectures=arm64-v8a' '--offline' '--no-daemon' '--max-workers=2' *> $log
+            & $gradle.FullName ':app:assembleRelease' '-PreactNativeArchitectures=arm64-v8a' @packagingArgs '--offline' '--no-daemon' '--max-workers=2' *> $log
             $buildExit = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $previousPreference

@@ -1,0 +1,4 @@
+{
+  "expo.useLegacyPackaging": "true",
+  "android.enableBundleCompression": "true"
+}
