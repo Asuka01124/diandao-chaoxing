@@ -1,6 +1,8 @@
+import { useContext } from 'react';
 import type React from 'react';
 import { ActivityIndicator, Modal, Pressable, View } from 'react-native';
 import { Button, Input, Text, XStack, YStack, useTheme } from 'tamagui';
+import { KeyboardScrollContext } from './layout';
 
 export function SettingsRow({ title, detail, onPress, onLongPress, accessibilityHint, accessory, symbol, selected }: { title: string; detail?: string; onPress?: () => void; onLongPress?: () => void; accessibilityHint?: string; accessory?: React.ReactNode; symbol?: string; selected?: boolean }) {
   const interactive = !!onPress || !!onLongPress;
@@ -41,6 +43,7 @@ export function ActionSheet({ visible, title, actions, onClose }: { visible: boo
 export function Message({ children }: { children: React.ReactNode }) { return <Text color="$muted" fontSize={14} lineHeight={21}>{children}</Text>; }
 
 export function GlassInput(props: React.ComponentProps<typeof Input>) {
-  return <Input {...props} backgroundColor="$field" color="$color" borderWidth={1} borderColor="$fieldBorder" borderRadius={15} minHeight={52}
+  const revealInput = useContext(KeyboardScrollContext);
+  return <Input {...props} onFocus={event => { props.onFocus?.(event); revealInput?.(); }} backgroundColor="$field" color="$color" borderWidth={1} borderColor="$fieldBorder" borderRadius={15} minHeight={52}
     paddingHorizontal={16} fontSize={15} focusStyle={{ borderWidth: 2, borderColor: '$brand', backgroundColor: '$panel' }} />;
 }
