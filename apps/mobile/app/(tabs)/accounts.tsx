@@ -55,7 +55,7 @@ export default function AccountsScreen() {
   return <AppScreen title="代签账号" subtitle="添加和管理同学的账号" keyboardAware>
     <SectionTitle>代签账号</SectionTitle><GroupedList>{delegates.length ? delegates.map(accountRow) : <EmptyState title="还没有代签账号" detail="在下方添加同学的账号" />}</GroupedList>
     <SectionTitle>{reauthId ? '重新登录账号' : '添加代签账号'}</SectionTitle>
-    <YStack backgroundColor="$panel" borderRadius="$panel" padding={18} gap={12}>
+    <YStack backgroundColor="$panel" borderRadius="$radius.panel" padding={18} gap={12}>
       <Text color="$muted" fontSize={12} fontWeight="600">显示名称</Text>
       <GlassInput placeholder="显示名称（可选）" value={label} onChangeText={setLabel} accessibilityLabel="显示名称" />
       <Text color="$muted" fontSize={12} fontWeight="600">学习通账号</Text>

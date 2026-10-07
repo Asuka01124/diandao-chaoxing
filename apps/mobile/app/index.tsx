@@ -46,7 +46,7 @@ export default function LoginScreen() {
   }
   return <AppScreen title="欢迎回来" subtitle="登录学习通，查看你的课程与签到">
     <HeroCard eyebrow="专注每一次签到" title="课程与任务，尽在掌握" detail="账号资料加密保存在这台设备，登录后即可开始。" />
-    <YStack backgroundColor="$panel" borderRadius="$panel" padding={20} marginTop={22} gap={14}>
+    <YStack backgroundColor="$panel" borderRadius="$radius.panel" padding={20} marginTop={22} gap={14}>
       <Text color="$muted" fontSize={12} fontWeight="600">学习通账号</Text>
       <GlassInput placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" />
       <Text color="$muted" fontSize={12} fontWeight="600">密码</Text>
