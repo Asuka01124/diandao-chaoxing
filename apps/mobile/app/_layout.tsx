@@ -10,6 +10,7 @@ import { StartupSplash } from '../src/features/startup/startup-splash';
 import { FeedbackProvider } from '../src/ui';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.setOptions({ duration: 0, fade: false });
 
 function ThemedNavigator() {
   const system = useColorScheme();

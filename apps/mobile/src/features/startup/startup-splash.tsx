@@ -1,83 +1,122 @@
-import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, View, useColorScheme } from 'react-native';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useCallback, useEffect, useState } from 'react';
+import { Image, Modal, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Svg, { Circle, G, Path, Text as SvgText } from 'react-native-svg';
 import * as SplashScreen from 'expo-splash-screen';
-import { useVault } from '../../state';
+import { StatusBar } from 'expo-status-bar';
+import { getStartupFrame, getStartupScale } from './startup-motion';
+import { playStartupAnimation } from './startup-playback';
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const startupIcon = require('../../../assets/adaptive-icon.png');
+const INK = '#101010';
 
 export function StartupSplash() {
-  const dark = useColorScheme() === 'dark';
-  const ink = dark ? '#E1E1E1' : '#4D4D4D';
-  const { ready } = useVault();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [visible, setVisible] = useState(true);
-  const [finished, setFinished] = useState(false);
-  const nativeHidden = useRef(false);
-  const outline = useRef(new Animated.Value(0)).current;
-  const check = useRef(new Animated.Value(0)).current;
-  const dots = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
-  const title = useRef(new Animated.Value(0)).current;
-  const overlay = useRef(new Animated.Value(1)).current;
+  const [laidOut, setLaidOut] = useState(false);
+  const [presented, setPresented] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const onImageLoaded = useCallback(() => setImageLoaded(true), []);
 
   useEffect(() => {
-    let active = true;
-    let sequence: Animated.CompositeAnimation | undefined;
-    void AccessibilityInfo.isReduceMotionEnabled().then(reduced => {
-      if (!active) return;
-      if (reduced) {
-        outline.setValue(1); check.setValue(1);
-        dots.forEach(dot => dot.setValue(1)); title.setValue(1);
-        setFinished(true);
-        return;
-      }
-      const timing = (value: Animated.Value, duration: number) => Animated.timing(value, {
-        toValue: 1, duration, easing: Easing.out(Easing.cubic), useNativeDriver: false,
-      });
-      sequence = Animated.sequence([
-        timing(outline, 420),
-        Animated.parallel([timing(check, 240), timing(title, 240)]),
-        Animated.stagger(65, dots.map(dot => timing(dot, 150))),
-      ]);
-      sequence.start(({ finished: completed }) => { if (active && completed) setFinished(true); });
-    }).catch(() => {
-      if (!active) return;
-      outline.setValue(1); check.setValue(1);
-      dots.forEach(dot => dot.setValue(1)); title.setValue(1);
-      setFinished(true);
-    });
-    return () => { active = false; sequence?.stop(); };
-  }, [outline, check, dots, title]);
-
-  useEffect(() => {
-    if (!ready || !finished) return;
-    const fade = Animated.timing(overlay, { toValue: 0, duration: 160, useNativeDriver: true });
-    fade.start(({ finished: completed }) => { if (completed) setVisible(false); });
-    return () => fade.stop();
-  }, [ready, finished, overlay]);
+    if (!visible || !presented || !laidOut || !imageLoaded) return;
+    // Always run the full timeline. Neither OS animation settings nor vault readiness can skip it.
+    SplashScreen.hide();
+    return playStartupAnimation(
+      { requestFrame: requestAnimationFrame, cancelFrame: cancelAnimationFrame },
+      setElapsed,
+      () => setVisible(false),
+    );
+  }, [visible, presented, laidOut, imageLoaded]);
 
   if (!visible) return null;
-  const reveal = (length: number) => outline.interpolate({ inputRange: [0, 1], outputRange: [length, 0] });
-  return <Animated.View
-    onLayout={() => {
-      if (nativeHidden.current) return;
-      nativeHidden.current = true;
-      void SplashScreen.hideAsync().catch(() => {});
-    }}
-    importantForAccessibility="no-hide-descendants"
-    pointerEvents="none"
-    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: dark ? '#111111' : '#F7F7F7', opacity: overlay, alignItems: 'center', justifyContent: 'center' }}>
-    <View style={{ width: 224, height: 224 }}>
-      <Svg width="100%" height="100%" viewBox="0 0 1024 1024" fill="none">
-        <AnimatedRect x={205} y={238} width={614} height={584} rx={116} stroke={ink} strokeWidth={38} strokeDasharray={[2400]} strokeDashoffset={reveal(2400)} />
-        <AnimatedPath d="M205 380h614" stroke={ink} strokeWidth={38} strokeLinecap="round" strokeDasharray={[614]} strokeDashoffset={reveal(614)} />
-        <AnimatedPath d="M358 198v107M666 198v107" stroke={ink} strokeWidth={38} strokeLinecap="round" strokeDasharray={[107]} strokeDashoffset={reveal(107)} />
-        <AnimatedCircle cx={512} cy={572} r={142} stroke={ink} strokeWidth={38} strokeDasharray={[900]} strokeDashoffset={reveal(900)} />
-        <AnimatedPath d="m440 573 49 49 99-105" stroke={ink} strokeWidth={38} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={[220]} strokeDashoffset={check.interpolate({ inputRange: [0, 1], outputRange: [220, 0] })} />
-        {[355, 512, 669].map((cx, index) => <AnimatedCircle key={cx} cx={cx} cy={753} r={16} fill={ink} opacity={dots[index]} />)}
-      </Svg>
+  const frame = getStartupFrame(elapsed);
+  const scale = getStartupScale(windowWidth, windowHeight) * frame.camera;
+  const width = frame.width * scale;
+  const height = frame.height * scale;
+  const radius = frame.radius * scale;
+  const handSize = frame.handSize * scale;
+  const brandY = frame.brandY + (1 - frame.brandOpacity) * 5;
+
+  return <Modal
+    visible
+    transparent
+    animationType="none"
+    presentationStyle="overFullScreen"
+    hardwareAccelerated
+    statusBarTranslucent
+    navigationBarTranslucent
+    onShow={() => setPresented(true)}
+    onRequestClose={() => {}}>
+    <StatusBar style="dark" />
+    <View
+      testID="startup-splash"
+      onLayout={() => setLaidOut(true)}
+      accessible
+      accessibilityLabel="到点正在启动"
+      accessibilityViewIsModal
+      importantForAccessibility="yes"
+      pointerEvents="auto"
+      style={styles.overlay}>
+      <View style={[styles.surface, { width, height, borderRadius: radius }]}>
+        <View style={[styles.content, { width, height, borderRadius: radius }]}>
+          <Image
+            source={startupIcon}
+            accessible={false}
+            resizeMode="contain"
+            onLoadEnd={onImageLoaded}
+            style={{
+              position: 'absolute',
+              width: handSize,
+              height: handSize,
+              left: (width - handSize) / 2 + frame.handX * scale,
+              top: (height - handSize) / 2 + frame.handY * scale,
+              transform: [{ rotate: `${frame.handAngle}deg` }, { scale: frame.handPress }],
+            }}
+          />
+          <Svg
+            width={width}
+            height={height}
+            viewBox={`${-frame.width / 2} ${-frame.height / 2} ${frame.width} ${frame.height}`}
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}>
+            <Circle cx={144} cy={-29} r={6 * (0.8 + 0.2 * frame.targetOpacity)} fill={INK} opacity={frame.targetOpacity} />
+            <G x={204} y={-2 * (1 - frame.symbolOpacity)} opacity={frame.symbolOpacity}>
+              <Path d={frame.symbolPath} fill="none" stroke={INK} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+            </G>
+            <SvgText x={15} y={(1 - frame.waitingOpacity) * 5} opacity={frame.waitingOpacity}
+              fill={INK} fontSize={Math.max(27, 13 / scale)} fontWeight="500" textAnchor="middle" alignmentBaseline="central">正在确认</SvgText>
+            <SvgText x={14} y={brandY} opacity={frame.brandOpacity}
+              fill={INK} fontSize={47} fontWeight="600" letterSpacing={3} textAnchor="middle" alignmentBaseline="central">到点</SvgText>
+            <SvgText x={15} y={29 + (1 - frame.taglineOpacity) * 5} opacity={frame.taglineOpacity}
+              fill={INK} fillOpacity={0.58} fontSize={Math.max(16, 12 / scale)} letterSpacing={1.2}
+              textAnchor="middle" alignmentBaseline="central">轻点，即到。</SvgText>
+          </Svg>
+        </View>
+      </View>
     </View>
-    <Animated.Text style={{ marginTop: 22, color: ink, fontSize: 27, fontWeight: '700', letterSpacing: 2, opacity: title }}>到点</Animated.Text>
-  </Animated.View>;
+  </Modal>;
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  surface: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  content: {
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FAFAFA',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+});
