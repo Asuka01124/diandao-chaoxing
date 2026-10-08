@@ -4,7 +4,7 @@
 
 ## 下载与安装
 
-- [下载最新版 Android arm64 APK](https://github.com/Asuka01124/diandao-chaoxing/releases/latest)。当前项目版本为 **v1.1**（下载链接指向最新已发布版本）。
+- [下载最新版 Android arm64 APK](https://github.com/Asuka01124/diandao-chaoxing/releases/latest)。当前项目版本为 **v1.2**（下载链接指向最新已发布版本）。
 - 在 Android 手机上安装 APK，首次打开按提示登录学习通账号。普通使用无需安装 Node.js、Bun 或 Android SDK。
 - 应用包名为 `dev.local.sign.tool`；使用相同签名的旧版可以覆盖安装。
 
