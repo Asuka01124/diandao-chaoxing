@@ -1,6 +1,7 @@
 import type { ProviderSession } from "@sign/shared";
 import { getOperationSignal } from "./deadline";
 import { ProviderError } from "./errors";
+import { responseMessage } from './response';
 
 type Cookie = ProviderSession["cookies"][number];
 export type Transport = (url: string, init: RequestInit) => Promise<Response>;
@@ -93,6 +94,7 @@ export class RequestSession {
     url: string,
     init: RequestInit = {},
     redirects = 0,
+    beforeSend?: () => void | Promise<void>,
   ): Promise<Response> {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" || !allowedHost(parsed.hostname))
@@ -103,19 +105,14 @@ export class RequestSession {
     const cookie = this.cookieHeader(parsed);
     if (cookie) headers.set("cookie", cookie);
     let response: Response;
+    const signals = [AbortSignal.timeout(12000), getOperationSignal(), init.signal]
+      .filter((signal): signal is AbortSignal => Boolean(signal));
+    const request = { ...init, headers, credentials: 'omit' as const, redirect: 'manual' as const,
+      signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals) };
+    if (request.signal.aborted) throw new ProviderError('NETWORK_TIMEOUT', '第三方请求已取消', true);
+    await beforeSend?.();
     try {
-      const signals = [
-        AbortSignal.timeout(12000),
-        getOperationSignal(),
-        init.signal,
-      ].filter((signal): signal is AbortSignal => Boolean(signal));
-      response = await this.transport(url, {
-        ...init,
-        headers,
-        credentials: "omit",
-        redirect: "manual",
-        signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
-      });
+      response = await this.transport(url, request);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -137,12 +134,14 @@ export class RequestSession {
         redirects + 1,
       );
     }
-    if (!response.ok)
+    if (!response.ok) {
+      const detail = responseMessage(await response.text());
       throw new ProviderError(
         response.status === 429 ? "RATE_LIMITED" : "UNKNOWN",
-        `第三方 HTTP ${response.status}`,
+        `学习通 HTTP ${response.status}${detail ? `：${detail}` : ''}`,
         response.status >= 500 || response.status === 429,
       );
+    }
     return response;
   }
 }

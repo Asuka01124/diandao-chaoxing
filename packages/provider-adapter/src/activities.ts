@@ -1,6 +1,7 @@
 import type { Activity, ProviderSession } from "@sign/shared";
 import { asArray, asObject, json, stamp, str } from "./response";
 import { RequestSession, type Transport } from "./session";
+import { signStatus } from './sign';
 
 function kindFrom(raw: Record<string, unknown>): Activity["kind"] {
   const other = String(raw.otherId ?? "");
@@ -18,6 +19,24 @@ export async function activities(
   transport?: Transport,
 ): Promise<Activity[]> {
   const jar = new RequestSession(session, transport);
+  const list = await readCourseActivities(jar, courseId, classId);
+  let index = 0;
+  // activelist.userStatus 是活动列表标记，个人签到结果由 preSign 返回。
+  await Promise.all(Array.from({ length: Math.min(2, list.length) }, async () => {
+    while (index < list.length) {
+      const activity = list[index++];
+      const status = await signStatus(session, activity, transport);
+      activity.signed = status.state === 'SIGNED' ? true : status.state === 'READY' || status.state === 'EXPIRED' ? false : null;
+    }
+  }));
+  return list;
+}
+
+export async function readCourseActivities(
+  jar: RequestSession,
+  courseId: string,
+  classId: string,
+): Promise<Activity[]> {
   const url = new URL(
     "https://mobilelearn.chaoxing.com/v2/apis/active/student/activelist",
   );
@@ -28,10 +47,10 @@ export async function activities(
     classId,
   }).toString();
   const data = asObject((await json(await jar.request(url.toString()))).data);
-  const ext = JSON.stringify(data.ext ?? {});
+  const ext = typeof data.ext === 'string' ? data.ext : JSON.stringify(data.ext ?? {});
   return asArray(data.activeList)
     .map((raw) => asObject(raw))
-    .filter((item) => item.type === 2 || item.type === 74)
+    .filter((item) => [2, 74].includes(Number(item.type)))
     .map((item) => ({
       id: str(item.id, "activity.id"),
       courseId,
@@ -42,10 +61,7 @@ export async function activities(
       startTime: stamp(item.startTime),
       endTime: stamp(item.endTime),
       status: item.status == null || !Number.isInteger(Number(item.status)) ? null : Number(item.status),
-      signed:
-        item.userStatus === undefined
-          ? null
-          : [1, 2, 3, 9].includes(Number(item.userStatus)),
+      signed: null,
       ext,
       cachedAt: Date.now(),
     }));
@@ -55,7 +71,10 @@ export async function activityDetail(
   activity: Activity,
   transport?: Transport,
 ): Promise<Activity> {
-  const jar = new RequestSession(session, transport);
+  return readActivityDetail(new RequestSession(session, transport), activity);
+}
+
+export async function readActivityDetail(jar: RequestSession, activity: Activity): Promise<Activity> {
   const url = new URL(
     "https://mobilelearn.chaoxing.com/v2/apis/active/getPPTActiveInfo",
   );

@@ -1,5 +1,5 @@
 import { beforeEach, expect, mock, test } from 'bun:test';
-import { emptyVault, type Activity, type ProviderSession, type SignInput, type VaultData } from '@sign/shared';
+import { emptyVault, type Activity, type ProviderSession, type SignInput, type SignStatus, type VaultData } from '@sign/shared';
 import { DEMO_COURSE_ID } from '../features/courses/demo-course';
 
 let counter = 0;
@@ -8,7 +8,7 @@ class FakeClientError extends Error { constructor(public code: string, message: 
 const behavior = {
   submit: async (_id: string): Promise<{ state: 'READY' | 'SIGNED'; submitted?: boolean }> => ({ state: 'READY' }),
   status: async (_id: string): Promise<{ state: 'READY' | 'SIGNED' }> => ({ state: 'READY' }),
-  preflight: async (_id: string): Promise<{ state: 'READY' | 'WAITING_FACE' }> => ({ state: 'READY' }),
+  prepare: async (_id: string, _faceMediaId?: string): Promise<SignStatus | undefined> => undefined,
   upload: async (_id: string): Promise<{ mediaId: string }> => ({ mediaId: 'image' }),
 };
 const clearedPhotos: string[] = [];
@@ -19,8 +19,13 @@ mock.module('./api', () => ({
   api: {
     check: async (s: ProviderSession) => { providerCalls.push('check'); return s; },
     status: async (s: ProviderSession) => { providerCalls.push('status'); return behavior.status(s.userId); },
-    preflight: async (s: ProviderSession) => { providerCalls.push('preflight'); return behavior.preflight(s.userId); },
-    submit: async (s: ProviderSession) => { providerCalls.push('submit'); return behavior.submit(s.userId); },
+    submit: async (s: ProviderSession, _activity: Activity, _input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>) => {
+      providerCalls.push('submit');
+      const stopped = await behavior.prepare(s.userId, faceMediaId);
+      if (stopped) return stopped;
+      await onSubmit?.();
+      return behavior.submit(s.userId);
+    },
     upload: async (s: ProviderSession) => { providerCalls.push('upload'); return behavior.upload(s.userId); },
   },
 }));
@@ -35,7 +40,7 @@ function store() {
   data.accounts = ['a', 'b'].map(id => ({ id, label: id, role: id === 'a' ? 'primary' as const : 'delegate' as const, session: session(id), authorizedAt: '', state: 'VALID' }));
   return { get: () => data, update: async (change: (value: VaultData) => void) => { const next = structuredClone(data); change(next); data = next; } };
 }
-beforeEach(() => { counter = 0; clearedPhotos.length = 0; providerCalls.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.preflight = async () => ({ state: 'READY' }); behavior.upload = async () => ({ mediaId: 'image' }); });
+beforeEach(() => { counter = 0; clearedPhotos.length = 0; providerCalls.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.prepare = async () => undefined; behavior.upload = async () => ({ mediaId: 'image' }); });
 
 test('旧测试课程的六种任务不会调用学习通接口', async () => {
   const state = store();
@@ -61,7 +66,7 @@ test('旧测试课程的六种任务不会调用学习通接口', async () => {
 
 test('一个账号失败不丢失另一个账号的结果', async () => {
   const state = store(); const submitted = new Set<string>();
-  behavior.submit = async id => { if (id === 'a') throw new FakeClientError('UNKNOWN', '失败'); submitted.add(id); return { state: 'READY' }; };
+  behavior.submit = async id => { if (id === 'a') throw new FakeClientError('UNKNOWN', '失败'); submitted.add(id); return { state: 'SIGNED', submitted: true }; };
   behavior.status = async id => ({ state: submitted.has(id) ? 'SIGNED' : 'READY' });
   const job = await createJob(state, activity, ['a', 'b'], { kind: 'click' }); await runJob(state, job.id);
   expect(state.get().attempts.map(a => a.state)).toEqual(['FAILED', 'SUCCESS']);
@@ -70,7 +75,7 @@ test('一个账号失败不丢失另一个账号的结果', async () => {
 
 test('动态码过期后只继续未完成账号', async () => {
   const state = store(); const calls: string[] = []; let fresh = false; const signed = new Set<string>();
-  behavior.submit = async id => { calls.push(id); if (id === 'b' && !fresh) throw new FakeClientError('QR_EXPIRED', '二维码过期'); signed.add(id); return { state: 'READY' }; };
+  behavior.submit = async id => { calls.push(id); if (id === 'b' && !fresh) throw new FakeClientError('QR_EXPIRED', '二维码过期'); signed.add(id); return { state: 'SIGNED', submitted: true }; };
   behavior.status = async id => ({ state: signed.has(id) ? 'SIGNED' : 'READY' });
   const job = await createJob(state, { ...activity, kind: 'qr' }, ['a', 'b'], { kind: 'qr', qrPayload: 'old', scannedAt: new Date().toISOString() });
   await runJob(state, job.id); expect(state.get().attempts.map(a => a.state)).toEqual(['SUCCESS', 'WAITING_QR']);
@@ -90,9 +95,10 @@ test('过期扫描时间不会改变等待中的二维码任务', async () => {
 test('提交超时先查询远端状态，不重复提交', async () => {
   const state = store(); let submits = 0; let checks = 0;
   behavior.submit = async () => { submits++; throw new FakeClientError('NETWORK_TIMEOUT', '超时', true); };
-  behavior.status = async () => ({ state: ++checks >= 2 ? 'SIGNED' : 'READY' });
+  behavior.status = async () => ({ state: ++checks >= 1 ? 'SIGNED' : 'READY' });
   const job = await createJob(state, activity, ['a'], { kind: 'click' }); await runJob(state, job.id);
   expect(submits).toBe(1); expect(state.get().attempts[0].state).toBe('SUCCESS');
+  expect(state.get().attempts[0].count).toBe(1);
 });
 test('第三方已确认的新提交记为成功', async () => {
   const state = store(); let signed = false;
@@ -101,19 +107,69 @@ test('第三方已确认的新提交记为成功', async () => {
   const job = await createJob(state, activity, ['a'], { kind: 'click' }); await runJob(state, job.id);
   expect(state.get().attempts[0].state).toBe('SUCCESS');
 });
+
+test('已核验的新提交不再发起会覆盖成功的额外查询', async () => {
+  const state = store(); let checks = 0;
+  behavior.status = async () => {
+    if (++checks > 1) throw new FakeClientError('PROVIDER_CHANGED', '无法确认远端签到状态');
+    return { state: 'READY' };
+  };
+  behavior.submit = async () => ({ state: 'SIGNED', submitted: true });
+  const job = await createJob(state, activity, ['a'], { kind: 'click' }); await runJob(state, job.id);
+  expect(checks).toBe(0);
+  expect(providerCalls).toEqual(['check', 'submit']);
+  expect(state.get().attempts[0].count).toBe(1);
+  expect(state.get().attempts[0].state).toBe('SUCCESS');
+});
+
+test('远端仍未签到时不能把提交接受或队列结束当成签到成功', async () => {
+  const state = store();
+  const job = await createJob(state, { ...activity, title: '第五次签到' }, ['a'], { kind: 'click' });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0].state).toBe('FAILED');
+  expect(state.get().attempts[0].message).toBe('学习通仍显示未签到，请检查活动要求后重试');
+});
+
+test('签到前解析失败明确说明未提交，重试不会绕过核查', async () => {
+  const state = store();
+  behavior.prepare = async () => { throw new FakeClientError('PROVIDER_CHANGED', '无法确认远端签到状态'); };
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 0, message: '签到前核查失败，未提交：无法确认远端签到状态' });
+  await retryAttempt(state, job.id, 'a');
+  expect(state.get().attempts[0].count).toBe(0);
+  expect(providerCalls).not.toContain('status');
+});
 test('人脸等待状态在提供该账号照片后继续', async () => {
   const state = store(); let signed = false;
-  behavior.preflight = async () => ({ state: 'WAITING_FACE' });
+  behavior.prepare = async (_id, faceMediaId) => faceMediaId ? undefined : { state: 'WAITING_FACE' };
   behavior.submit = async () => { signed = true; return { state: 'SIGNED', submitted: true }; };
   behavior.status = async () => ({ state: signed ? 'SIGNED' : 'READY' });
   const job = await createJob(state, activity, ['a'], { kind: 'click' }); await runJob(state, job.id);
   expect(state.get().attempts[0].state).toBe('WAITING_FACE');
+  expect(state.get().attempts[0].count).toBe(0);
   await provideFaceAndResume(state, job.id, 'a', 'image-a');
   expect(state.get().attempts[0].state).toBe('SUCCESS');
+  expect(state.get().attempts[0].count).toBe(1);
+});
+
+test('准备阶段超时不进入提交核验，也不增加次数', async () => {
+  const state = store();
+  behavior.prepare = async () => { throw new FakeClientError('NETWORK_TIMEOUT', '预签到请求超时'); };
+  const job = await createJob(state, activity, ['a'], { kind: 'click' }); await runJob(state, job.id);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 0, message: '签到前核查失败，未提交：预签到请求超时' });
+  expect(providerCalls).toEqual(['check', 'submit']);
+});
+
+test('学习通具体拒绝原因保存在账号结果中，次数反映实际提交', async () => {
+  const state = store();
+  behavior.submit = async () => { throw new FakeClientError('PROVIDER_CHANGED', '学习通返回：教师已结束本次活动'); };
+  const job = await createJob(state, activity, ['a'], { kind: 'click' }); await runJob(state, job.id);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 1, message: '学习通返回：教师已结束本次活动' });
 });
 test('一个账号等待人脸时其余账号仍执行', async () => {
   const state = store(); const signed = new Set<string>(); const checked: string[] = [];
-  behavior.preflight = async id => { checked.push(id); return { state: 'WAITING_FACE' }; };
+  behavior.prepare = async (id, faceMediaId) => { checked.push(id); return faceMediaId ? undefined : { state: 'WAITING_FACE' }; };
   behavior.submit = async id => { signed.add(id); return { state: 'SIGNED', submitted: true }; };
   behavior.status = async id => ({ state: signed.has(id) ? 'SIGNED' : 'READY' });
   const job = await createJob(state, activity, ['a', 'b'], { kind: 'click' });

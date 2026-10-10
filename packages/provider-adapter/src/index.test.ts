@@ -35,7 +35,7 @@ describe('第三方响应解析', () => {
     expect(paths).not.toContain('/pptSign/stuSignajax');
   });
   test('课程活动解析不把缺字段误认为空列表', async () => {
-    const transport = async () => Response.json({ data: { activeList: [{ id: 123, type: 2, otherId: '5', nameOne: '密码签到', startTime: 123456, userStatus: 0 }], ext: {} } });
+    const transport = async (url: string) => url.includes('/preSign') ? new Response('signstatus = 0') : Response.json({ data: { activeList: [{ id: 123, type: 2, otherId: '5', nameOne: '密码签到', startTime: 123456, userStatus: 0 }], ext: {} } });
     const list = await activities(session('a'), '1', '2', transport);
     expect(list[0].kind).toBe('code'); expect(list[0].signed).toBe(false);
     await expect(activities(session('a'), '1', '2', async () => Response.json({ data: {} }))).rejects.toMatchObject({ code: 'PROVIDER_CHANGED' });
@@ -52,7 +52,7 @@ describe('第三方响应解析', () => {
       throw new Error('unexpected request');
     };
     expect(await submit(session('a'), activity, { kind: 'click' }, transport)).toMatchObject({ state: 'SIGNED', submitted: true });
-    expect(calls).toEqual(['/v2/apis/active/getPPTActiveInfo', '/newsign/preSign', '/pptSign/analysis', '/pptSign/analysis2', '/pptSign/stuSignajax', '/newsign/preSign']);
+    expect(calls).toEqual(['/newsign/preSign', '/v2/apis/active/getPPTActiveInfo', '/pptSign/analysis', '/pptSign/analysis2', '/pptSign/stuSignajax', '/newsign/preSign']);
   });
   test('活动详情区分照片要求和关联签退', async () => {
     const detail = await activityDetail(session('a'), activity, async () => Response.json({ data: { otherId: 0, ifphoto: 1, signInId: 123, signOutId: 456, signOutPublishTimeStamp: 1790740000000 } }));

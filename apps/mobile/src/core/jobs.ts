@@ -30,7 +30,9 @@ function accountFor(store: VaultAccess, id: string): Account | undefined { retur
 async function executeAccount(store: VaultAccess, job: Job, accountId: string): Promise<'continue' | 'wait'> {
   const account = accountFor(store, accountId);
   if (!account) { await setAttempt(store, job.id, accountId, 'FAILED', '账号已删除', 'INVALID_INPUT'); return 'continue'; }
-  const previous = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId)?.state;
+  const previousAttempt = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId);
+  const previous = previousAttempt?.state;
+  let requestStarted = false;
   try {
     if (isDemoActivity(job.activity)) {
       await setAttempt(store, job.id, accountId, 'FAILED', '旧测试课程已移除，未向学习通提交', 'INVALID_INPUT');
@@ -39,17 +41,12 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
     await setAttempt(store, job.id, accountId, 'PREFLIGHT');
     const session = await api.check(account.session);
     await store.update(data => { const item = data.accounts.find(a => a.id === accountId); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } });
-    // 恢复中或提交超时后，先查远端，避免重复提交。
-    const before = await api.status(session, job.activity);
-    if (before.state === 'SIGNED') { await setAttempt(store, job.id, accountId, previous === 'SUBMITTING' || previous === 'VERIFYING' ? 'SUCCESS' : 'ALREADY_SIGNED'); return 'continue'; }
-    if (before.state === 'EXPIRED') { await setAttempt(store, job.id, accountId, 'EXPIRED'); return 'continue'; }
-    const check = await api.preflight(session, job.activity);
-    if (check.state === 'WAITING_CAPTCHA' || (check.state === 'WAITING_FACE' && !job.faceMediaIdByAccount?.[accountId])) {
-      await setAttempt(store, job.id, accountId, check.state, check.message);
-      return 'continue';
+    // 已发送过的任务恢复时先核查；新任务的检查统一由 submit 完成。
+    if ((previousAttempt?.count ?? 0) > 0 || previous === 'SUBMITTING' || previous === 'VERIFYING') {
+      const before = await api.status(session, job.activity);
+      if (before.state === 'SIGNED') { await setAttempt(store, job.id, accountId, 'SUCCESS'); return 'continue'; }
+      if (before.state === 'EXPIRED') { await setAttempt(store, job.id, accountId, 'EXPIRED'); return 'continue'; }
     }
-    if (check.state === 'SIGNED') { await setAttempt(store, job.id, accountId, 'ALREADY_SIGNED'); return 'continue'; }
-    if (check.state === 'EXPIRED') { await setAttempt(store, job.id, accountId, 'EXPIRED'); return 'continue'; }
     if (!accountFor(store, accountId)) return 'continue';
     let photoMediaId: string | undefined;
     if (job.input.kind === 'photo') {
@@ -64,14 +61,16 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
       }
     }
     if (!accountFor(store, accountId)) return 'continue';
-    await setAttempt(store, job.id, accountId, 'SUBMITTING');
     let result;
     try {
       const input = job.input.kind === 'photo' ? { ...job.input, mediaIdByAccount: { [session.userId]: photoMediaId! } } : job.input;
-      result = await api.submit(session, job.activity, input, job.faceMediaIdByAccount?.[accountId]);
+      result = await api.submit(session, job.activity, input, job.faceMediaIdByAccount?.[accountId], async () => {
+        await setAttempt(store, job.id, accountId, 'SUBMITTING');
+        requestStarted = true;
+      });
     }
     catch (error) {
-      if (error instanceof ClientError && error.code === 'NETWORK_TIMEOUT') {
+      if (requestStarted && error instanceof ClientError && error.code === 'NETWORK_TIMEOUT') {
         await setAttempt(store, job.id, accountId, 'VERIFYING', '提交超时，正在核查远端状态');
         const remote = await api.status(session, job.activity);
         if (remote.state === 'SIGNED') { await setAttempt(store, job.id, accountId, 'SUCCESS'); return 'continue'; }
@@ -83,16 +82,21 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
       return result.state === 'WAITING_QR' ? 'wait' : 'continue';
     }
     if (result.state === 'EXPIRED') { await setAttempt(store, job.id, accountId, 'EXPIRED'); return 'continue'; }
-    await setAttempt(store, job.id, accountId, 'VERIFYING');
-    const verified = await api.status(session, job.activity);
-    if (verified.state === 'SIGNED') await setAttempt(store, job.id, accountId, result.state === 'SIGNED' && !result.submitted ? 'ALREADY_SIGNED' : 'SUCCESS');
-    else await setAttempt(store, job.id, accountId, 'FAILED', '无法确认签到成功', 'PROVIDER_CHANGED');
+    if (result.state === 'SIGNED') {
+      await setAttempt(store, job.id, accountId, result.submitted ? 'SUCCESS' : 'ALREADY_SIGNED');
+      return 'continue';
+    }
+    await setAttempt(store, job.id, accountId, 'FAILED', '学习通仍显示未签到，请检查活动要求后重试', 'PROVIDER_CHANGED');
   } catch (error) {
     const client = error instanceof ClientError ? error : undefined;
     const state: AttemptState = client?.code === 'REAUTH_REQUIRED' || client?.code === 'SESSION_EXPIRED' ? 'REAUTH_REQUIRED'
       : client?.code === 'QR_EXPIRED' ? 'WAITING_QR' : client?.code === 'VALIDATION_FAILED' && job.faceMediaIdByAccount?.[accountId] ? 'WAITING_FACE' : client?.code === 'ACTIVITY_NOT_FOUND' ? 'EXPIRED' : 'FAILED';
     if (state === 'REAUTH_REQUIRED') await store.update(data => { const item = data.accounts.find(a => a.id === accountId); if (item) item.state = 'REAUTH_REQUIRED'; });
-    await setAttempt(store, job.id, accountId, state, client?.message ?? '执行失败', client?.code ?? 'UNKNOWN');
+    const phase = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId)?.state;
+    const message = client?.message ?? '执行失败';
+    await setAttempt(store, job.id, accountId, state,
+      state === 'FAILED' && phase === 'PREFLIGHT' ? `签到前核查失败，未提交：${message}` : message,
+      client?.code ?? 'UNKNOWN');
     return state === 'WAITING_QR' ? 'wait' : 'continue';
   }
   return 'continue';

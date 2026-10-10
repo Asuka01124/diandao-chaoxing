@@ -16,3 +16,15 @@ export function str(v: unknown, field: string): string {
   return String(v);
 }
 export function stamp(v: unknown): number | null { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; }
+
+export function responseMessage(body: string): string {
+  let message = body;
+  try {
+    const data = JSON.parse(body);
+    const detail = data?.errorMsg || data?.msg || data?.message;
+    if (typeof detail === 'string') message = detail;
+  } catch {}
+  return message.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400);
+}

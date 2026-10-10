@@ -1,5 +1,10 @@
 # Android APK 构建记录（Windows）
 
+## 2026-10-10 签到状态修复构建
+
+- 测试包日志 `.tooling/build-apk-20261010-132308.log` 首个失败为 Expo 原生模块的 `JavaScriptObject.cpp.o` 编译任务。Clang 未输出进一步错误，不能把末尾 `ninja: build stopped` 作为根因；具体原因尚未确认。
+- 保持构建配置与原生源码不变，使用标准脚本重跑后，`.tooling/build-apk-20261010-132659.log` 构建成功（3m 3s）。不保留任何生成目录临时修改，也未清除应用数据。
+
 此页记录 2026-10-02 在 `codex/test-course-beta` 构建 v0.5.15-beta.1 时实际遇到、已解决的问题。下次打包先使用仓库脚本：
 
 ```powershell

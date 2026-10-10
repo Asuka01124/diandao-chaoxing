@@ -6,13 +6,13 @@ import {
   type SignInput,
   type SignStatus,
 } from '@sign/shared';
-import { activityDetail } from './activities';
+import { readActivityDetail, readCourseActivities } from './activities';
+import { attendanceState } from './attendance';
 import { ProviderError } from './errors';
-import { json } from './response';
+import { json, responseMessage } from './response';
 import { allowedHost, RequestSession, type Transport } from './session';
 
 const apiRoot = 'https://mobilelearn.chaoxing.com';
-const confirmedStatuses = new Set([1, 2, 3, 9]);
 
 function apiUrl(path: string, query?: Record<string, string>): URL {
   const url = new URL(path, apiRoot);
@@ -20,39 +20,53 @@ function apiUrl(path: string, query?: Record<string, string>): URL {
   return url;
 }
 
+function attendanceRecord(page: string): Record<string, unknown> | undefined {
+  const marker = /\bprimaryAttend\b["']?\s*[:=]\s*\{/g;
+  for (const match of page.matchAll(marker)) {
+    const start = match.index! + match[0].length - 1;
+    let depth = 0, inString = false, escaped = false;
+    for (let end = start; end < page.length; end++) {
+      const char = page[end];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === '"') inString = false;
+      } else if (char === '"') inString = true;
+      else if (char === '{') depth++;
+      else if (char === '}' && --depth === 0) {
+        try { return JSON.parse(page.slice(start, end + 1)); }
+        catch { break; }
+      }
+    }
+  }
+  return undefined;
+}
+
 export function parseStatusPage(page: string): SignStatus {
+  if (/passport2\.chaoxing\.com/i.test(page) && /<input\b[^>]*\btype\s*=\s*["']?password/i.test(page)) {
+    throw new ProviderError('SESSION_EXPIRED', '学习通登录已过期，请重新授权');
+  }
   if (page.includes('校验失败，未查询到活动数据')) {
     throw new ProviderError('NOT_MEMBER', '该账号不在活动班级');
   }
+  const record = attendanceRecord(page);
+  const marker = page.match(/\bsignstatus\b["']?\s*[:=]\s*(?:(["'])(-?\d+)\1|(-?\d+)(?![\w.]))/i);
+  const value = record && 'status' in record ? record.status : marker?.[2] ?? marker?.[3];
+  const state = attendanceState(value);
+  if (state === 'SIGNED') return { state };
   if (page.includes('下次早点哦')) return { state: 'EXPIRED' };
-
-  const attendance = page.match(/"primaryAttend"\s*:\s*(\{[^{}]*\})/);
-  let status: number | undefined;
-  if (attendance) {
-    try {
-      const record: unknown = JSON.parse(attendance[1]);
-      if (record && typeof record === 'object' && 'status' in record) {
-        status = Number(record.status);
-      }
-    } catch {
-      // Some responses contain a partial script; the simple status marker is still usable.
-    }
-  }
-  if (!Number.isInteger(status)) {
-    const marker = page.match(/\bsignstatus\s*=\s*(\d+)/i);
-    status = marker ? Number(marker[1]) : undefined;
-  }
-  if (!Number.isInteger(status)) {
+  if (value === undefined) {
     throw new ProviderError('PROVIDER_CHANGED', '无法确认远端签到状态');
   }
-  return { state: confirmedStatuses.has(status!) ? 'SIGNED' : 'READY' };
+  if (!state) throw new ProviderError('PROVIDER_CHANGED', '远端签到状态未知，请刷新活动后重试');
+  return { state };
 }
 
-async function readStatus(
+async function requestStatusPage(
   client: RequestSession,
   account: ProviderSession,
   activity: Activity,
-): Promise<SignStatus> {
+): Promise<string> {
   const url = apiUrl('/newsign/preSign', {
     courseId: activity.courseId,
     classId: activity.classId,
@@ -69,7 +83,40 @@ async function readStatus(
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ ext: activity.ext }),
   });
-  return parseStatusPage(await response.text());
+  if (response.url && new URL(response.url).hostname === 'passport2.chaoxing.com') {
+    throw new ProviderError('SESSION_EXPIRED', '学习通登录已过期，请重新授权');
+  }
+  return response.text();
+}
+
+async function readStatus(
+  client: RequestSession,
+  account: ProviderSession,
+  activity: Activity,
+): Promise<SignStatus> {
+  const page = await requestStatusPage(client, account, activity);
+  try { return parseStatusPage(page); }
+  catch (error) {
+    if (!(error instanceof ProviderError) || activity.source !== 'course' ||
+      !(error.code === 'NOT_MEMBER' || (error.code === 'PROVIDER_CHANGED' && error.message === '无法确认远端签到状态'))) throw error;
+
+    // 预签到 HTML 不一定携带状态；使用同一账号的课程列表，按活动 ID 精确核查。
+    const list = await readCourseActivities(client, activity.courseId, activity.classId);
+    const current = list.find(item => item.id === activity.id);
+    if (!current) throw new ProviderError('ACTIVITY_NOT_FOUND', '当前账号的课程列表中没有该签到，请刷新活动');
+    if (current.ext !== activity.ext) {
+      activity.ext = current.ext;
+      const refreshed = await requestStatusPage(client, account, { ...activity, ext: current.ext });
+      try { return parseStatusPage(refreshed); }
+      catch (next) {
+        if (!(next instanceof ProviderError) || next.code !== 'PROVIDER_CHANGED' || next.message !== '无法确认远端签到状态') throw next;
+      }
+    } else if (error.code === 'NOT_MEMBER') throw error;
+
+    if ((current.status != null && current.status !== 1) || (current.endTime != null && current.endTime <= Date.now())) return { state: 'EXPIRED' };
+    if (current.status === 1) return { state: 'READY' };
+    throw new ProviderError('PROVIDER_CHANGED', '课程活动列表未提供可确认的签到状态，请刷新活动');
+  }
 }
 
 async function establishSignContext(client: RequestSession, activityId: string): Promise<void> {
@@ -94,26 +141,7 @@ export function signStatus(
   activity: Activity,
   transport?: Transport,
 ): Promise<SignStatus> {
-  return readStatus(new RequestSession(account, transport), account, activity);
-}
-
-export async function preflight(
-  account: ProviderSession,
-  activity: Activity,
-  transport?: Transport,
-): Promise<SignStatus> {
-  const current = await activityDetail(account, activity, transport);
-  const client = new RequestSession(account, transport);
-  const status = await readStatus(client, account, current);
-  if (status.state !== 'READY') return status;
-  if (current.requirements?.captcha) {
-    return { state: 'WAITING_CAPTCHA', message: '需要人工完成验证码' };
-  }
-  if (current.requirements?.face) {
-    return { state: 'WAITING_FACE', message: '需要人脸验证' };
-  }
-  await establishSignContext(client, activity.id);
-  return status;
+  return readStatus(new RequestSession(account, transport), account, { ...activity });
 }
 
 export function parseSubmitResponse(response: string): SignStatus {
@@ -135,7 +163,7 @@ export function parseSubmitResponse(response: string): SignStatus {
   if (message.startsWith('errorLocation')) {
     throw new ProviderError('LOCATION_REJECTED', '位置不在允许范围');
   }
-  throw new ProviderError('PROVIDER_CHANGED', '第三方返回未知签到结果');
+  throw new ProviderError('PROVIDER_CHANGED', `学习通返回：${responseMessage(response) || '空签到响应'}`);
 }
 
 export function parseQrPayload(payload: string, expectedId: string): { enc: string; code?: string } {
@@ -294,6 +322,7 @@ export async function submit(
   input: SignInput,
   transport?: Transport,
   faceMediaId?: string,
+  onSubmit?: () => void | Promise<void>,
 ): Promise<SignStatus> {
   try {
     validateActivityInput(activity, input);
@@ -301,7 +330,11 @@ export async function submit(
     throw new ProviderError('INVALID_INPUT', '输入不符合活动要求');
   }
 
-  const current = await activityDetail(account, activity, transport);
+  const client = new RequestSession(account, transport);
+  const context = { ...activity };
+  const prior = await readStatus(client, account, context);
+  if (prior.state !== 'READY') return prior;
+  const current = await readActivityDetail(client, context);
   if (current.kind !== activity.kind) {
     throw new ProviderError('PROVIDER_CHANGED', '活动类型已变化，请刷新活动');
   }
@@ -315,13 +348,10 @@ export async function submit(
     throw new ProviderError('INVALID_INPUT', '该活动要求位置输入');
   }
 
-  const client = new RequestSession(account, transport);
-  const prior = await readStatus(client, account, activity);
-  if (prior.state !== 'READY') return prior;
   await establishSignContext(client, activity.id);
-  const url = await submissionUrl(client, account, activity, input, faceMediaId);
-  const result = parseSubmitResponse(await (await client.request(url.href)).text());
+  const url = await submissionUrl(client, account, current, input, faceMediaId);
+  const result = parseSubmitResponse(await (await client.request(url.href, {}, 0, onSubmit)).text());
   if (result.state !== 'READY') return result;
-  const verified = await readStatus(client, account, activity);
+  const verified = await readStatus(client, account, current);
   return verified.state === 'SIGNED' ? { ...verified, submitted: true } : verified;
 }

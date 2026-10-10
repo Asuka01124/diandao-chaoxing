@@ -25,12 +25,9 @@ export const api = {
   detail: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
     ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不读取学习通详情'))
     : direct(() => provider.activityDetail(session, activity)),
-  preflight: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
-    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不请求学习通签到'))
-    : direct<SignStatus>(() => provider.preflight(session, activity)),
-  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string) => isDemoActivity(activity)
+  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>) => isDemoActivity(activity)
     ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不可提交到学习通'))
-    : direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId)),
+    : direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId, onSubmit)),
   status: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
     ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动没有学习通签到状态'))
     : direct<SignStatus>(() => provider.signStatus(session, activity)),

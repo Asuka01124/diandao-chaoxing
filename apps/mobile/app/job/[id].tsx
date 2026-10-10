@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { api } from '../../src/core/api';
+import { jobResult } from '../../src/core/job-result';
 import { checkChallenge, provideFaceAndResume, replacePhotoAndRetry, replaceQrAndResume, retryAttempt, runJob } from '../../src/core/jobs';
 import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } from '../../src/core/media';
 import { useVault } from '../../src/state';
@@ -68,9 +69,10 @@ export default function JobScreen() {
     catch (error) { if (store.get().jobs.find(j => j.id === id)?.photoUri !== staged) clearStagedPhoto(staged); throw error; }
   }
   const attempts = data.attempts.filter(a => a.jobId === id);
+  const result = jobResult(job, attempts);
   return <AppScreen title="任务结果" subtitle={job.activity.title}>
     {!!error && <FeedbackNotice message={error} tone="error" />}
-    <HeroCard eyebrow="执行状态" title={job.state === 'DONE' ? '任务已完成' : job.state === 'WAITING' ? '等待你的输入' : '正在逐账号执行'} detail="下方显示每个账号的实际结果，失败的账号可以单独核查和重试。" />
+    <HeroCard eyebrow="执行状态" title={result.title} detail={result.detail} />
     <SectionTitle>逐账号状态</SectionTitle><GroupedList>{attempts.map(attempt => {
       const account = data.accounts.find(a => a.id === attempt.accountId);
       return <YStack key={attempt.accountId}><SettingsRow title={account?.label ?? '已删除账号'} detail={`${attempt.message ?? ''}${attempt.count ? ` · 提交 ${attempt.count} 次` : ''}`} accessory={<StatusBadge state={attempt.state} />} />
