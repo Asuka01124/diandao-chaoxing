@@ -30,10 +30,10 @@ export default function ActivityScreen() {
       catch { warning = '活动详情已更新，远端签到状态暂时无法确认'; }
       await store.update(v => { const item = v.accounts.find(a => a.id === account.id); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } const index = v.activityCache.findIndex(a => a.id === detail.id && a.cacheAccountId === account.id); if (index >= 0) v.activityCache[index] = { ...detail, cacheAccountId: account.id, signed }; });
       const message = warning || '活动状态已更新';
-      setStatus({ tone: warning ? 'error' : 'success', message });
-      if (manual) notify(message, warning ? 'error' : 'success');
+      setStatus(warning ? { tone: 'error', message } : null);
+      if (manual && !warning) notify(message, 'success');
     }
-    catch (e) { const message = e instanceof Error ? e.message : '详情读取失败'; setStatus({ tone: 'error', message }); if (manual) notify(message, 'error'); } finally { setBusy(false); }
+    catch (e) { const message = e instanceof Error ? e.message : '详情读取失败'; setStatus({ tone: 'error', message }); } finally { setBusy(false); }
   }
   async function openSignOut() {
     if (!account || !activity?.relation?.signOutId) return; setBusy(true); setStatus({ tone: 'loading', message: '正在打开签退活动…' });
@@ -41,14 +41,14 @@ export default function ActivityScreen() {
       const related = await api.detail(account.session, { ...activity, id: activity.relation.signOutId, title: `${activity.title} · 签退`, phase: 'sign-out', relation: undefined, signed: null });
       await store.update(v => { v.activityCache = [...v.activityCache.filter(a => a.id !== related.id || a.cacheAccountId !== account.id), { ...related, cacheAccountId: account.id }]; });
       router.push({ pathname: '/activity/[id]', params: { id: related.id, accountId: account.id } });
-    } catch (e) { const message = e instanceof Error ? e.message : '签退活动读取失败'; setStatus({ tone: 'error', message }); notify(message, 'error'); } finally { setBusy(false); }
+    } catch (e) { const message = e instanceof Error ? e.message : '签退活动读取失败'; setStatus({ tone: 'error', message }); } finally { setBusy(false); }
   }
   const ended = activityPhase(activity) === 'ended';
   const requirement = activity.requirements ? [activity.requirements.captcha && '验证码', activity.requirements.face && '人脸', activity.requirements.location && '位置', activity.requirements.photo && '照片'].filter(Boolean).join('、') : '';
   if (isDemoActivity(activity)) return <AppScreen title="活动已移除"><EmptyState title="该活动已移除" detail="请从课程列表打开当前签到活动" /></AppScreen>;
   return <AppScreen title={activity.title} subtitle={account?.label} footer={!ended && activity.kind !== 'unknown' ? <PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })}>选择账号签到</PrimaryButton> : undefined}>
     {status && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <HeroCard eyebrow={ended ? '已结束' : '进行中'} title={activity.signed === true ? '你已签到' : activity.signed === false ? '你未签到' : '正在读取签到状态'} detail={ended ? activity.signed === false ? '签到已结束' : undefined : '可选择账号，帮同学完成签到。'} />
+    <HeroCard eyebrow={ended ? '已结束' : '进行中'} title={activity.signed === true ? '你已签到' : activity.signed === false ? '你未签到' : '正在读取签到状态'} detail={ended ? undefined : '可选择账号，帮同学完成签到。'} />
     <SectionTitle>签到信息</SectionTitle><GroupedList>
       {!!activity.endTime && <SettingsRow title="截止时间" detail={new Date(activity.endTime).toLocaleString()} />}
       {!!requirement && <SettingsRow title="需要" detail={requirement} />}
