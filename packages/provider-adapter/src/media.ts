@@ -23,16 +23,24 @@ export async function uploadPhoto(
     await jar.request("https://pan-yz.chaoxing.com/api/token/uservalid"),
   );
   const token = str(tokenBody._token, "cloud token");
-  const fileBytes = new Uint8Array(bytes.length);
-  fileBytes.set(bytes);
-  const form = new FormData();
-  form.set("puid", session.userId);
-  form.set("file", new Blob([fileBytes], { type: "image/jpeg" }), "sign.jpg");
+  const boundary = `----DiandaoPhoto${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  const encoder = new TextEncoder();
+  const prefix = encoder.encode(
+    `--${boundary}\r\nContent-Disposition: form-data; name="puid"\r\n\r\n${session.userId}\r\n` +
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="sign.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`,
+  );
+  const suffix = encoder.encode(`\r\n--${boundary}--\r\n`);
+  const body = new Uint8Array(prefix.length + bytes.length + suffix.length);
+  body.set(prefix);
+  body.set(bytes, prefix.length);
+  body.set(suffix, prefix.length + bytes.length);
   const url = new URL("https://pan-yz.chaoxing.com/upload");
   url.searchParams.set("_from", "mobilelearn");
   url.searchParams.set("_token", token);
   const result = await json(
-    await jar.request(url.toString(), { method: "POST", body: form }),
+    await jar.request(url.toString(), {
+      method: "POST", headers: { "content-type": `multipart/form-data; boundary=${boundary}` }, body,
+    }),
   );
   return { mediaId: str(result.objectId, "objectId") };
 }

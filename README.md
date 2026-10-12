@@ -24,7 +24,7 @@
 ```powershell
 bun install --linker hoisted
 bun run typecheck
-bun test
+bun run test
 ```
 
 Windows 构建 Android APK 请使用 [`scripts/build-android-apk.ps1`](scripts/build-android-apk.ps1)；已遇到的路径、缓存和签名问题记录在 [`docs/android-apk-build.md`](docs/android-apk-build.md)。
@@ -39,6 +39,10 @@ bun run --cwd apps/mobile start
 ```
 
 `ios` 脚本需要 macOS。项目采用 Expo development build；增加原生依赖后需重新构建客户端。
+
+## CI/CD
+
+每次 push 自动运行离线测试和类型检查，main 通过后自动构建并发布 Android arm64 APK，沿用现有签名。测试不登录学习通、不发送真实签到，也不使用学习通账号密码。配置、版本规则和构建产物见 [自动测试与发布说明](docs/ci-cd.md)。
 
 ## 功能与数据处理
 
