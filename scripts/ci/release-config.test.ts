@@ -4,8 +4,9 @@ const require = createRequire(import.meta.url);
 const { releaseVersion } = require('./prepare-android.cjs');
 const signing = require('../../apps/mobile/plugins/android-ci-signing.js');
 
-test('自动发布版本随运行编号递增，提升基础版本码后仍可升级', () => {
-  expect(releaseVersion('1.4', 27, 1)).toMatchObject({ version: '1.4.1', versionCode: 270001, tag: 'v1.4.1' });
+test('发布保持配置版本，运行编号递增且基础版本码提升后可升级', () => {
+  expect(releaseVersion('1.5', 28, 2)).toMatchObject({ version: '1.5', versionCode: 280002, tag: 'v1.5', apkName: 'daodian-v1.5-arm64.apk' });
+  expect(releaseVersion('1.5', 28, 3, false)).toMatchObject({ version: '1.5', versionCode: 280003, tag: 'v1.5-build.3' });
   expect(releaseVersion('1.4', 27, 2).versionCode).toBeGreaterThan(releaseVersion('1.4', 27, 1).versionCode);
   expect(releaseVersion('1.5', 28, 1).versionCode).toBeGreaterThan(releaseVersion('1.4', 27, 9999).versionCode);
   for (const run of [0, -1, 10000, NaN]) expect(() => releaseVersion('1.4', 27, run)).toThrow();
