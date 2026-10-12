@@ -32,7 +32,7 @@ export default function TabsLayout() {
       <MaterialTopTabBar {...props} />
     </View>}
     screenOptions={{ swipeEnabled: true, animationEnabled: !reduceMotion, lazy: false, tabBarShowIcon: true,
-      tabBarActiveTintColor: theme.color.val, tabBarInactiveTintColor: theme.muted.val, tabBarPressColor: theme.soft.val,
+      tabBarActiveTintColor: theme.color.val, tabBarInactiveTintColor: theme.muted.val, tabBarPressColor: 'transparent', tabBarPressOpacity: 1,
       tabBarIndicatorStyle: { height: 68, borderRadius: 19, marginHorizontal: 6, backgroundColor: theme.soft.val }, tabBarLabelStyle: { fontSize: 12, fontWeight: '500', letterSpacing: 0.2 },
       tabBarItemStyle: { height: 68 }, tabBarStyle: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 } }}>
     <TopTabs.Screen name="courses" options={{ title: '课程', tabBarIcon: tabIcon('courses') }} />
