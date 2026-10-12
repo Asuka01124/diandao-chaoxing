@@ -5,10 +5,10 @@ import { Text, XStack, YStack, useTheme } from 'tamagui';
 import type { Course, ProviderSession } from '@sign/shared';
 import { cachedCourseCover } from './course-cover';
 
-function CourseIcon({ name, color, surface }: { name: string; color: string; surface: string }) {
+export function CourseIcon({ name, color, surface, size = 48 }: { name: string; color: string; surface: string; size?: number }) {
   const common = { stroke: color, strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   const kind = /人工智能|AI|机器学习/.test(name) ? 'network' : /形势|政策|法律|思政/.test(name) ? 'balance' : /检索|文献|论文|研究/.test(name) ? 'search' : /团队|沟通|管理|心理/.test(name) ? 'people' : 'book';
-  return <Svg width={48} height={48} viewBox="0 0 48 48" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+  return <Svg width={size} height={size} viewBox="0 0 48 48" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
     {kind === 'network' && <>
       <Path d="M9 16 24 8l15 12-9 17-17-3L9 16Zm0 0 21 21M24 8l-11 26m26-14-26 14M9 16l30 4" {...common} />
       {[[9,16],[24,8],[39,20],[30,37],[13,34],[24,23]].map(([cx,cy], i) => <Circle key={i} cx={cx} cy={cy} r="3.5" fill={surface} {...common} />)}

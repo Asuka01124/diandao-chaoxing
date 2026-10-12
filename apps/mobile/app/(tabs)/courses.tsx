@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, Pressable } from 'react-native';
+import { ActivityIndicator, AppState, Pressable } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { Text, XStack, YStack, useTheme } from 'tamagui';
 import type { Account, Course } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { CourseCard } from '../../src/features/courses/course-card';
-import { courseKey, ongoingCourseKeys, prioritizeOngoingCourses } from '../../src/features/courses/course-priority';
+import { courseKey, ongoingCourseActivities } from '../../src/features/courses/course-priority';
+import { OngoingAttendanceCard } from '../../src/features/courses/ongoing-attendance-card';
 import { useVault } from '../../src/state';
 import { AppScreen, FeedbackNotice, GroupedList, type FeedbackTone } from '../../src/ui';
 
@@ -39,6 +40,14 @@ export default function CoursesScreen() {
   const checkedAt = useRef<Record<string, number>>({});
   const account = primaryAccount(data);
   const theme = useTheme();
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    const updateTime = () => setNow(Date.now());
+    const timer = setInterval(updateTime, 30_000);
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') updateTime(); });
+    return () => { clearInterval(timer); listener.remove(); };
+  }, []);
 
   useEffect(() => { if (store.ready && !primaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   useEffect(() => { if (account) void loadCourses(account); }, [account?.id]);
@@ -97,18 +106,18 @@ export default function CoursesScreen() {
         });
       }
       if (request !== sequence.current) return;
-      const activeKeys = ongoingCourseKeys(store.get().activityCache, current.id);
-      const activeCount = list.filter(course => activeKeys.has(courseKey(course))).length;
-      setStatus({ tone: failures ? 'info' : 'success', message: `${list.length} 门课程 · ${activeCount} 门有进行中的签到${failures ? ` · ${failures} 门未能检查` : ''}` });
+      setNow(Date.now());
+      setStatus(failures ? { tone: 'info', message: `${failures} 门课程未能检查签到活动，请刷新重试` } : null);
     } catch (e) { if (request === sequence.current) setStatus({ tone: 'error', message: `课程读取失败：${e instanceof Error ? e.message : '请稍后重试'}` }); }
     finally { if (request === sequence.current) setBusy(false); }
   }
 
   if (!data || !account) return null;
-  const visibleCourses = prioritizeOngoingCourses(courses, data.activityCache, account.id);
+  const visibleCourses = courses;
+  const ongoing = ongoingCourseActivities(courses, data.activityCache, account.id, now);
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
-    ? <GroupedList><Text color="$muted" fontSize={14} marginLeft={18} marginTop={16} marginBottom={9}>我的课程</Text>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
+    ? <GroupedList>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
     : <YStack gap={12}>{Array.from({ length: Math.ceil(visibleCourses.length / 2) }, (_, index) => {
       const pair = visibleCourses.slice(index * 2, index * 2 + 2);
       return <XStack key={pair[0].id + '-' + pair[0].classId} gap={12}>
@@ -130,6 +139,13 @@ export default function CoursesScreen() {
       </Pressable>
     </XStack>
     {status && <YStack marginTop={13}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <YStack marginTop={13}>{courseCards}</YStack>
+    <OngoingAttendanceCard entries={ongoing} onPress={activity => router.push({ pathname: '/activity/[id]', params: { id: activity.id, accountId: account.id } })} />
+    <YStack marginTop={ongoing.length ? 24 : 20}>
+      <XStack alignItems="center" justifyContent="space-between" marginBottom={12}>
+        <Text color="$color" fontSize={15} lineHeight={22} fontWeight="500" accessibilityRole="header">全部课程</Text>
+        <Text color="$muted" fontSize={12} lineHeight={18}>{courses.length} 门</Text>
+      </XStack>
+      {courseCards}
+    </YStack>
   </AppScreen>;
 }
