@@ -182,16 +182,6 @@ export default function SettingsScreen() {
       <SettingsRow title={main?.label ?? '学习通账号'} detail={main?.session.identifier} symbol="我" />
       <SettingsRow title="退出登录" symbol="↗" onPress={() => setLogoutConfirm(true)} />
     </GroupedList>
-    <SectionTitle>偏好</SectionTitle><GroupedList>
-      <SettingsRow title="界面外观" symbol="◐" detail={data.settings.appearance === 'system' ? '跟随系统' : data.settings.appearance === 'light' ? '亮色' : '暗色'} onPress={() => {
-        const next = data.settings.appearance === 'system' ? 'light' : data.settings.appearance === 'light' ? 'dark' : 'system';
-        void store.update(v => { v.settings.appearance = next; }).then(() => { setError(''); notify(`界面已切换为${next === 'system' ? '跟随系统' : next === 'light' ? '亮色' : '暗色'}`, 'success'); }).catch(e => { const message = e instanceof Error ? e.message : '切换外观失败'; setError(message); notify(message, 'error'); });
-      }} />
-      <SettingsRow title="失败照片保留" symbol="▧" detail={`${data.settings.imageRetentionHours} 小时`} onPress={() => {
-        const hours = data.settings.imageRetentionHours === 24 ? 1 : 24;
-        void store.update(v => { v.settings.imageRetentionHours = hours; }).then(() => { setError(''); notify(`失败照片将保留 ${hours} 小时`, 'success'); }).catch(e => { const message = e instanceof Error ? e.message : '保存设置失败'; setError(message); notify(message, 'error'); });
-      }} />
-    </GroupedList>
     <SectionTitle>常用位置</SectionTitle><GroupedList>{data.settings.favoriteLocations.length ? data.settings.favoriteLocations.map((location, index) => <SettingsRow key={`${location.address}-${index}`} title={location.address} detail="轻点更改，长按管理" symbol="⌖" onPress={() => editLocation(index)} onLongPress={() => setMenuIndex(index)} accessibilityHint="轻点打开地图更改位置，长按显示更改和删除操作" />) : <EmptyState title="暂无常用位置" />}</GroupedList>
     <YStack marginTop={12}><PrimaryButton onPress={() => { setEditingIndex(null); setMapOpen(true); }}>添加位置</PrimaryButton></YStack>
     <SectionTitle>预留照片 · {data.settings.reservedPhotos.length}/10</SectionTitle>
@@ -203,7 +193,7 @@ export default function SettingsScreen() {
       <YStack flex={1}><PrimaryButton disabled={data.settings.reservedPhotos.length >= 10 || !!savingPhoto} loading={savingPhoto === 'album'} onPress={() => { void addReservedPhoto('album'); }}>相册添加</PrimaryButton></YStack>
       <YStack flex={1}><PrimaryButton disabled={data.settings.reservedPhotos.length >= 10 || !!savingPhoto} loading={savingPhoto === 'camera'} onPress={() => { void addReservedPhoto('camera'); }}>拍摄预留</PrimaryButton></YStack>
     </XStack>
-    <Text color="$muted" fontSize={12} lineHeight={18} marginTop={8}>预留照片保存在本机，直到你删除；不受失败照片保留时长影响。</Text>
+    <Text color="$muted" fontSize={12} lineHeight={18} marginTop={8}>预留照片保存在本机，直到你删除。</Text>
     {data.settings.reservedPhotos.length >= 10 && <Text color="$muted" fontSize={12} lineHeight={18}>已达到 10 张上限，删除一张后可继续添加。</Text>}
     <AboutAppSection />
     <MapPicker visible={mapOpen} initial={editingIndex === null ? null : data.settings.favoriteLocations[editingIndex] ?? null} onClose={() => { setMapOpen(false); setEditingIndex(null); }} onPick={(location: LocationInput) => {

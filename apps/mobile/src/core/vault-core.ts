@@ -29,10 +29,13 @@ export class EncryptedVault {
     if (!hex) throw new Error('本地密钥缺失，现有账号资料无法恢复');
     try {
       const plain = await this.ports.crypto.decrypt(await this.ports.files.read(name), hex);
-      const data = JSON.parse(new TextDecoder().decode(plain)) as Omit<VaultData, 'schemaVersion'> & { schemaVersion: 1 | 2; settings: VaultData['settings'] & { apiUrl?: string } };
+      const data = JSON.parse(new TextDecoder().decode(plain)) as Omit<VaultData, 'schemaVersion'> & { schemaVersion: 1 | 2 };
       if (![1, 2].includes(data.schemaVersion) || !Array.isArray(data.accounts) || !Array.isArray(data.jobs) || !Array.isArray(data.attempts)) throw new Error('版本不受支持');
-      delete data.settings.apiUrl;
-      if (!Array.isArray(data.settings.reservedPhotos)) data.settings.reservedPhotos = [];
+      // 只读取仍受支持的设置，旧版保存的额外字段不再进入应用状态。
+      data.settings = {
+        favoriteLocations: data.settings.favoriteLocations,
+        reservedPhotos: Array.isArray(data.settings.reservedPhotos) ? data.settings.reservedPhotos : [],
+      };
       if (data.schemaVersion === 1) {
         // 旧版没有账号角色；首次登录保存的账号位于第一位。
         data.accounts = data.accounts.map((account, index) => ({ ...account, role: index === 0 ? 'primary' : 'delegate' }));

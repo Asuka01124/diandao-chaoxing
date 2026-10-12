@@ -64,6 +64,21 @@ test('旧版保存的网关地址在读取时移除', async () => {
   expect(await vault.read()).not.toHaveProperty('settings.apiUrl');
 });
 
+test('旧版偏好字段被丢弃，账号、常用位置与预留照片保持完整', async () => {
+  const vault = new EncryptedVault(ports);
+  const data = emptyVault();
+  data.accounts = [account('alice', 'primary')];
+  data.settings.favoriteLocations = [{ latitude: 31.2, longitude: 121.5, address: '教学楼' }];
+  data.settings.reservedPhotos = [{ id: 'photo-1', createdAt: '2026-10-02T00:00:00.000Z', name: '门口' }];
+  const old = { ...data, settings: { ...data.settings, appearance: 'dark', imageRetentionHours: 1 } };
+  await vault.write(old);
+  const loaded = await vault.read();
+  expect(loaded).toEqual(data);
+  await vault.write(loaded);
+  const persisted = JSON.parse(new TextDecoder().decode(await ports.crypto.decrypt(files.get('vault.bin')!, key!)));
+  expect(persisted.settings).toEqual(data.settings);
+});
+
 test('旧版本机资料缺少预留照片列表时自动补齐', async () => {
   const vault = new EncryptedVault(ports);
   const data = emptyVault();

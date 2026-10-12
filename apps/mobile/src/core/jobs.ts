@@ -128,8 +128,8 @@ export async function cleanupCompletedPhoto(store: VaultAccess, jobId: string): 
   const photoInput = job.input.kind === 'photo' ? job.input : null;
   const retryNeedsFile = !isDemoActivity(job.activity) && photoInput !== null && job.accountIds.some(id =>
     !photoInput.mediaIdByAccount[id] && store.get().attempts.some(a => a.jobId === jobId && a.accountId === id && (a.state === 'FAILED' || a.state === 'REAUTH_REQUIRED')));
-  const retention = store.get().settings.imageRetentionHours * 60 * 60_000;
-  if (retryNeedsFile && Date.now() - Date.parse(job.createdAt) < retention) return;
+  // 需要重试的临时照片固定保留 24 小时。
+  if (retryNeedsFile && Date.now() - Date.parse(job.createdAt) < 24 * 60 * 60_000) return;
   const { clearStagedPhoto } = await import('./media');
   clearStagedPhoto(job.photoUri);
   await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.photoUri = undefined; });

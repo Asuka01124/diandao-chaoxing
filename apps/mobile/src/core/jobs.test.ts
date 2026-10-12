@@ -29,7 +29,7 @@ mock.module('./api', () => ({
     upload: async (s: ProviderSession) => { providerCalls.push('upload'); return behavior.upload(s.userId); },
   },
 }));
-const { createJob, runJob, replaceQrAndResume, provideFaceAndResume, retryAttempt } = await import('./jobs');
+const { createJob, runJob, cleanupCompletedPhoto, replaceQrAndResume, provideFaceAndResume, retryAttempt } = await import('./jobs');
 
 const activity: Activity = { id: 'act', courseId: 'course', classId: 'class', source: 'course', title: '测试签到', kind: 'click', startTime: null, endTime: null, signed: null, ext: '{}' };
 const legacyActivities = (): Activity[] => (['click', 'location', 'photo', 'qr', 'code', 'gesture'] as const)
@@ -204,4 +204,24 @@ test('重启恢复先查远端，已提交账号不重签且记为成功', async
   await runJob(state, job.id);
   expect(submits).toBe(0);
   expect(state.get().attempts[0].state).toBe('SUCCESS');
+});
+
+test('上传失败的临时照片固定保留 24 小时，到期清理且预留照片不受影响', async () => {
+  const state = store();
+  const reserved = { id: 'reserved-1', createdAt: '2026-10-02T00:00:00.000Z', name: '门口' };
+  await state.update(data => { data.settings.reservedPhotos.push(reserved); });
+  behavior.upload = async () => { throw new FakeClientError('UNKNOWN', '上传失败'); };
+  const uri = 'file:///cache/sign-photo-expiry.jpg';
+  const job = await createJob(state, { ...activity, kind: 'photo' }, ['a'], { kind: 'photo', mediaIdByAccount: {} }, uri);
+  await state.update(data => { data.jobs[0].createdAt = new Date(Date.now() - 2 * 60 * 60_000).toISOString(); });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0].state).toBe('FAILED');
+  expect(state.get().jobs[0].photoUri).toBe(uri);
+  expect(clearedPhotos).toEqual([]);
+  await state.update(data => { data.jobs[0].createdAt = new Date(Date.now() - 25 * 60 * 60_000).toISOString(); });
+  await cleanupCompletedPhoto(state, job.id);
+  expect(clearedPhotos).toEqual([uri]);
+  expect(state.get().jobs[0].photoUri).toBeUndefined();
+  expect(state.get().settings.reservedPhotos).toEqual([reserved]);
+  await expect(retryAttempt(state, job.id, 'a')).rejects.toThrow('临时照片已清理');
 });

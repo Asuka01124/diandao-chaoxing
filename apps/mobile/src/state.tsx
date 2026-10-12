@@ -39,7 +39,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     clean();
     const timer = setInterval(clean, 15 * 60_000);
     return () => clearInterval(timer);
-  }, [data !== null, data?.settings.imageRetentionHours, update]);
+  }, [data !== null, update]);
   const clear = useCallback(async () => { await chain.current; await clearVault(); try { clearAllStagedPhotos(); } catch {} try { clearAllReservedPhotos(); } catch {} const next = emptyVault(); current.current = next; setData(next); }, []);
   return <context.Provider value={{ data, ready, error, reload, clear, get: () => { if (!current.current) throw new Error('本地资料尚未读取'); return current.current; }, update }}>{children}</context.Provider>;
 }
