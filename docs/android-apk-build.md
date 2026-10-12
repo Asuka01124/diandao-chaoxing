@@ -1,5 +1,13 @@
 # Android APK 构建记录（Windows）
 
+## 1.4 版本验证（2026-10-12）
+
+- 版本名 `1.4`、Android 版本码 `27`；本次包含底部柔和胶囊滑块和网格课程卡片圆角按压蒙层修复。
+- 标准脚本构建 `daodian-v1.4-arm64.apk` 成功，日志 `.tooling/build-apk-20261012-140429.log` 为 `BUILD SUCCESSFUL in 7m`。
+- APK：41,342,857 字节；包名 `dev.local.sign.tool`、版本 `1.4`/`27`、原签名证书和仅含 `arm64-v8a` 的校验通过。16 KB ZIP 对齐和 APK 内置 `assets/app.config` 的版本检查通过。
+- 90 项测试、类型检查通过。当前没有连接 Android 设备，本次发布包未进行真机运行验收。
+- SHA-256：`cc6b46eb1c3adc0b31d519b36acf21b4db933695f703a797f335bcfca841e383`。
+
 ## 2026-10-10 签到状态修复构建
 
 - 测试包日志 `.tooling/build-apk-20261010-132308.log` 首个失败为 Expo 原生模块的 `JavaScriptObject.cpp.o` 编译任务。Clang 未输出进一步错误，不能把末尾 `ninja: build stopped` 作为根因；具体原因尚未确认。

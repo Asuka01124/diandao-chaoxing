@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Text, XStack, YStack, useTheme } from 'tamagui';
 import type { Course, ProviderSession } from '@sign/shared';
@@ -41,18 +41,22 @@ export function CourseCard({ course, session, onPress, layout = 'list', last = f
     if (course.imageUrl) void cachedCourseCover(session, course.imageUrl).then(uri => { if (active) setImageUri(uri); }).catch(() => { if (active) setImageFailed(true); });
     return () => { active = false; };
   }, [course.imageUrl, session.userId, layout]);
-  if (layout === 'grid') return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`}
-    style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.65 : 1 })}>
-    <YStack flex={1} minHeight={202} backgroundColor="$panel" borderRadius={20} overflow="hidden" shadowColor="#000000" shadowOpacity={0.045} shadowRadius={14} shadowOffset={{ width: 0, height: 4 }} elevation={2}>
-      {imageUri && !imageFailed
-        ? <Image source={{ uri: imageUri }} resizeMode="cover" style={{ width: '100%', height: 118, backgroundColor: theme.soft.val }} onError={() => setImageFailed(true)} />
-        : <YStack width="100%" height={118} backgroundColor="$soft" alignItems="center" justifyContent="center"><CourseIcon name={course.name} color={theme.muted.val} surface={theme.soft.val} /></YStack>}
-      <YStack paddingHorizontal={14} paddingTop={12} paddingBottom={15} gap={5}>
-        <Text fontSize={15} lineHeight={21} fontWeight="600" color="$color" numberOfLines={2}>{course.name}</Text>
-        {!!course.teacher && <Text fontSize={12} color="$muted" numberOfLines={1}>{course.teacher}</Text>}
-      </YStack>
-    </YStack>
-  </Pressable>;
+  if (layout === 'grid') return <YStack flex={1} minHeight={202} backgroundColor="$panel" borderRadius={20} shadowColor="#000000" shadowOpacity={0.045} shadowRadius={14} shadowOffset={{ width: 0, height: 4 }} elevation={2}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`}
+      style={{ flex: 1, borderRadius: 20, overflow: 'hidden', backgroundColor: theme.panel.val }}>
+      {({ pressed }) => <>
+        {imageUri && !imageFailed
+          ? <Image source={{ uri: imageUri }} resizeMode="cover" style={{ width: '100%', height: 118, backgroundColor: theme.soft.val }} onError={() => setImageFailed(true)} />
+          : <YStack width="100%" height={118} backgroundColor="$soft" alignItems="center" justifyContent="center"><CourseIcon name={course.name} color={theme.muted.val} surface={theme.soft.val} /></YStack>}
+        <YStack paddingHorizontal={14} paddingTop={12} paddingBottom={15} gap={5}>
+          <Text fontSize={15} lineHeight={21} fontWeight="600" color="$color" numberOfLines={2}>{course.name}</Text>
+          {!!course.teacher && <Text fontSize={12} color="$muted" numberOfLines={1}>{course.teacher}</Text>}
+        </YStack>
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+          style={[StyleSheet.absoluteFill, { backgroundColor: theme.color.val, opacity: pressed ? 0.06 : 0 }]} />
+      </>}
+    </Pressable>
+  </YStack>;
   return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`} style={({ pressed }) => ({ opacity: pressed ? 0.62 : 1 })}>
     <XStack minHeight={100} alignItems="center" marginHorizontal={18} paddingHorizontal={7} borderBottomWidth={last ? 0 : 1} borderColor="$separator" gap={19}>
       <CourseIcon name={course.name} color={theme.muted.val} surface={theme.panel.val} />

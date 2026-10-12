@@ -28,13 +28,13 @@ export default function TabsLayout() {
   }, []);
 
   return <TopTabs initialRouteName="courses" tabBarPosition="bottom" initialLayout={{ width }} overScrollMode="never" keyboardDismissMode="on-drag"
-    tabBar={(props: Parameters<typeof MaterialTopTabBar>[0]) => <View style={{ overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: theme.panel.val, paddingBottom: insets.bottom, shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: -4 }, elevation: 8 }}>
+    tabBar={(props: Parameters<typeof MaterialTopTabBar>[0]) => <View style={{ overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: theme.panel.val, paddingHorizontal: 12, paddingTop: 10, paddingBottom: insets.bottom + 8, shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: -4 }, elevation: 8 }}>
       <MaterialTopTabBar {...props} />
     </View>}
     screenOptions={{ swipeEnabled: true, animationEnabled: !reduceMotion, lazy: false, tabBarShowIcon: true,
       tabBarActiveTintColor: theme.color.val, tabBarInactiveTintColor: theme.muted.val, tabBarPressColor: theme.soft.val,
-      tabBarIndicatorStyle: { height: 0 }, tabBarLabelStyle: { fontSize: 11, fontWeight: '500', letterSpacing: 0.2 },
-      tabBarItemStyle: { height: 64 }, tabBarStyle: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 } }}>
+      tabBarIndicatorStyle: { height: 68, borderRadius: 19, marginHorizontal: 6, backgroundColor: theme.soft.val }, tabBarLabelStyle: { fontSize: 12, fontWeight: '500', letterSpacing: 0.2 },
+      tabBarItemStyle: { height: 68 }, tabBarStyle: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 } }}>
     <TopTabs.Screen name="courses" options={{ title: '课程', tabBarIcon: tabIcon('courses') }} />
     <TopTabs.Screen name="accounts" options={{ title: '代签', tabBarIcon: tabIcon('accounts') }} />
     <TopTabs.Screen name="jobs" options={{ title: '任务', tabBarIcon: tabIcon('jobs') }} />
