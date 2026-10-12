@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { releaseNotes } = require('./release-notes.cjs');
 const { execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const output = path.join(root, 'dist/release');
@@ -25,6 +26,6 @@ const target = path.join(output, metadata.apkName);
 fs.copyFileSync(apk, target);
 const digest = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
 fs.writeFileSync(path.join(output, 'SHA256SUMS'), `${digest}  ${metadata.apkName}\n`);
-fs.writeFileSync(path.join(output, 'RELEASE_NOTES.md'),
-  `由主分支 CI 自动构建。\n\n- 源码提交：${metadata.commit}\n- 版本：${metadata.version}，Android 版本码：${metadata.versionCode}\n- Android arm64 APK，沿用现有签名，可覆盖升级。\n- 发布前通过离线测试、TypeScript 检查、APK 版本/架构/签名及 16 KB ZIP 对齐校验。\n- 测试使用模拟数据，不登录学习通，不向学习通提交签到。\n- SHA-256：\`${digest}\`\n`);
+const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+fs.writeFileSync(path.join(output, 'RELEASE_NOTES.md'), releaseNotes(metadata, digest, changelog));
 console.log(`Verified ${metadata.apkName}: ${digest}`);

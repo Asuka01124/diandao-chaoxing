@@ -6,6 +6,7 @@ import { Text, XStack, YStack, useTheme } from 'tamagui';
 import type { LocationInput, ReservedPhoto } from '@sign/shared';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount, primaryAccount } from '../../src/features/accounts/account-role';
+import { AboutAppSection } from '../../src/features/updates/about-app-section';
 import { removeAccount } from '../../src/features/accounts/account-service';
 import { MapPicker } from '../../src/features/location/map-picker';
 import { ReservedPhotoRow } from '../../src/features/photos/reserved-photo-row';
@@ -204,6 +205,7 @@ export default function SettingsScreen() {
     </XStack>
     <Text color="$muted" fontSize={12} lineHeight={18} marginTop={8}>预留照片保存在本机，直到你删除；不受失败照片保留时长影响。</Text>
     {data.settings.reservedPhotos.length >= 10 && <Text color="$muted" fontSize={12} lineHeight={18}>已达到 10 张上限，删除一张后可继续添加。</Text>}
+    <AboutAppSection />
     <MapPicker visible={mapOpen} initial={editingIndex === null ? null : data.settings.favoriteLocations[editingIndex] ?? null} onClose={() => { setMapOpen(false); setEditingIndex(null); }} onPick={(location: LocationInput) => {
       const index = editingIndex;
       void store.update(v => {

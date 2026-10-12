@@ -4,7 +4,7 @@
 
 ## 下载与安装
 
-- [下载最新版 Android arm64 APK](https://github.com/Asuka01124/diandao-chaoxing/releases/latest)。当前项目版本为 **v1.5**（下载链接指向最新已发布版本）。
+- [下载最新版 Android arm64 APK](https://github.com/Asuka01124/diandao-chaoxing/releases/latest)。当前项目版本为 **v1.6**（下载链接指向最新已发布版本）。
 - 在 Android 手机上安装 APK，首次打开按提示登录学习通账号。普通使用无需安装 Node.js、Bun 或 Android SDK。
 - 应用包名为 `dev.local.sign.tool`；使用相同签名的旧版可以覆盖安装。
 
@@ -39,6 +39,8 @@ bun run --cwd apps/mobile start
 ```
 
 `ios` 脚本需要 macOS。项目采用 Expo development build；增加原生依赖后需重新构建客户端。
+
+设置页底部的「关于到点」提供 GitHub 仓库入口和版本更新检查；发现新版后展示更新说明，可前往下载 APK。检查只读取公开 GitHub Release，不需要学习通账号或 GitHub 登录。
 
 ## CI/CD
 
