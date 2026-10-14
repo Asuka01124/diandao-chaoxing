@@ -4,6 +4,7 @@ import TopTabs, { MaterialTopTabBar } from 'expo-router/js-top-tabs';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'tamagui';
+import { SlidingTabIndicator, type SlidingTabIndicatorProps } from '../../src/ui/tab-indicator';
 
 const tabNames = ['courses', 'accounts', 'jobs', 'settings'] as const;
 const tabIcon = (name: typeof tabNames[number]) => ({ color }: { color: ColorValue }) => <TabIcon name={name} color={String(color)} />;
@@ -21,6 +22,7 @@ export default function TabsLayout() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [swiping, setSwiping] = useState(false);
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
     const listener = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
@@ -28,10 +30,12 @@ export default function TabsLayout() {
   }, []);
 
   return <TopTabs initialRouteName="courses" tabBarPosition="bottom" initialLayout={{ width }} overScrollMode="never" keyboardDismissMode="on-drag"
+    screenListeners={{ swipeStart: () => setSwiping(true), swipeEnd: () => setSwiping(false) }}
     tabBar={(props: Parameters<typeof MaterialTopTabBar>[0]) => <View style={{ overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: theme.panel.val, paddingHorizontal: 12, paddingTop: 10, paddingBottom: insets.bottom + 8, shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: -4 }, elevation: 8 }}>
       <MaterialTopTabBar {...props} />
     </View>}
     screenOptions={{ swipeEnabled: true, animationEnabled: !reduceMotion, lazy: false, tabBarShowIcon: true,
+      tabBarIndicator: (props: Omit<SlidingTabIndicatorProps, 'reduceMotion' | 'swiping'>) => <SlidingTabIndicator {...props} reduceMotion={reduceMotion} swiping={swiping} />,
       tabBarActiveTintColor: theme.color.val, tabBarInactiveTintColor: theme.muted.val, tabBarPressColor: 'transparent', tabBarPressOpacity: 1,
       tabBarIndicatorStyle: { height: 68, borderRadius: 19, marginHorizontal: 6, backgroundColor: theme.soft.val }, tabBarLabelStyle: { fontSize: 12, fontWeight: '500', letterSpacing: 0.2 },
       tabBarItemStyle: { height: 68 }, tabBarStyle: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 } }}>
