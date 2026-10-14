@@ -1,5 +1,13 @@
 # Android APK 构建记录（Windows）
 
+## 1.7.1 CI 构建（2026-10-14）
+
+- 首次运行 [38581253904](https://github.com/Asuka01124/diandao-chaoxing/actions/runs/38581253904) 的离线测试与类型检查通过，Android 构建在安装 `ndk;27.0.12077973` 时失败。
+- 最早实际错误为 `Error on ZipFile unknown archive`，底层为 `java.util.zip.ZipException: Archive is not a ZIP archive`：SDK 安装器读到的 NDK 安装归档无效。后续 `expo-autolinking` 配置失败和 `SoftwareComponent with name 'release' not found` 均为连锁报错。
+- 对同一源码提交 `cfaba534546d8ea1bd2648bd4bb479d98d91a253` 重新运行失败任务后，NDK 安装成功，Gradle 为 `BUILD SUCCESSFUL in 14m 3s`；没有修改应用代码或 NDK 配置。尚不能确认首轮无效归档产生于下载、缓存还是上游分发，遇到相同错误可先重试失败任务。
+- 正式发布 [v1.7.1](https://github.com/Asuka01124/diandao-chaoxing/releases/tag/v1.7.1)，Android 版本码 `310006`；`daodian-v1.7.1-arm64.apk` 为 41,330,809 字节。离线测试、类型检查以及 APK 版本、原签名、架构、地图配置和 16 KB ZIP 对齐校验全部通过，未进行真机运行验收。
+- APK SHA-256：`b8bfe844b8a85982130dffdaa84b72c137c9839f8af78bf2b1b1139588aa5980`。
+
 ## 1.4 版本验证（2026-10-12）
 
 - 版本名 `1.4`、Android 版本码 `27`；本次包含底部柔和胶囊滑块和网格课程卡片圆角按压蒙层修复。
