@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Button, Text, XStack, YStack, useTheme } from 'tamagui';
 import appConfig from '../../../app.json';
-import { GroupedList, SectionTitle, useFeedback } from '../../ui';
+import { GroupedList, SectionTitle } from '../../ui';
 import { checkForUpdates, latestReleaseUrl, repositoryUrl, type AppRelease } from './release-update';
 
 function AboutIcon({ kind }: { kind: 'update' | 'repo' }) {
@@ -40,7 +40,6 @@ function AboutRow({ kind, title, detail, action, busy, last, onPress }: {
 
 export function AboutAppSection() {
   const theme = useTheme();
-  const notify = useFeedback();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const current = {
@@ -60,7 +59,7 @@ export function AboutAppSection() {
 
   async function openLink(url: string) {
     try { await Linking.openURL(url); }
-    catch { if (mounted.current) notify('无法打开链接，请稍后重试', 'error'); }
+    catch { if (mounted.current) { setFailed(true); setMessage('无法打开链接，请稍后重试'); } }
   }
   async function check() {
     if (pending.current) return;
@@ -76,12 +75,12 @@ export function AboutAppSection() {
         setRelease(result.release); setDialogOpen(true);
         setMessage(`发现新版本 ${result.release.tag}`);
       } else {
-        setMessage('当前已是最新版本'); notify('当前已是最新版本', 'info');
+        setMessage('当前已是最新版本');
       }
     } catch (error) {
       if (!mounted.current || controller.signal.aborted) return;
       const text = error instanceof Error ? error.message : '无法检查更新，请稍后重试';
-      setFailed(true); setMessage(text); notify(text, 'error');
+      setFailed(true); setMessage(text);
     } finally {
       if (pending.current === controller) {
         pending.current = null;

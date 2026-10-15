@@ -7,8 +7,48 @@ export type AppRelease = {
   version: string; versionCode: number | null; tag: string; releaseUrl: string; apkUrl: string; notes: string;
 };
 export type UpdateResult = { available: boolean; release: AppRelease };
-type Transport = (url: string, init: RequestInit) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+type UpdateResponse = { ok: boolean; status: number; headers?: Pick<Headers, 'get'>; json(): Promise<unknown> };
+type Transport = (url: string, init: RequestInit) => Promise<UpdateResponse>;
 export class UpdateError extends Error {}
+
+async function responseError(response: UpdateResponse): Promise<UpdateError> {
+  const { status, headers } = response;
+  if (status === 403 || status === 429) {
+    let message = '';
+    try {
+      const body = await response.json();
+      if (body && typeof body === 'object' && 'message' in body && typeof body.message === 'string') message = body.message;
+    } catch { /* 错误响应可能是 HTML 或空内容，不向用户展示原始响应。 */ }
+    const retryAfter = headers?.get('retry-after');
+    const remaining = headers?.get('x-ratelimit-remaining');
+    if (status === 429 || remaining === '0' || retryAfter != null || /\brate limit\b/i.test(message)) {
+      let seconds = NaN;
+      if (retryAfter?.trim()) {
+        seconds = /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter) : (Date.parse(retryAfter) - Date.now()) / 1000;
+      }
+      if (!Number.isFinite(seconds) && remaining === '0') {
+        const reset = headers?.get('x-ratelimit-reset');
+        if (reset && /^\d+$/.test(reset)) seconds = Number(reset) - Date.now() / 1000;
+      }
+      const retry = Number.isFinite(seconds) && seconds > 0 ? `请约 ${Math.ceil(seconds)} 秒后重试` : '请稍后重试';
+      return new UpdateError(`GitHub 请求频率受限（HTTP ${status}），${retry}`);
+    }
+    return new UpdateError('GitHub 拒绝访问更新接口（HTTP 403），请尝试更换网络或前往发布页查看');
+  }
+  const messages: Record<number, string> = {
+    400: '更新请求被拒绝（HTTP 400），请前往 GitHub 发布页查看',
+    401: '更新接口要求身份验证（HTTP 401），请前往 GitHub 发布页查看',
+    404: '未找到可访问的正式版本（HTTP 404），请前往 GitHub 发布页查看',
+    408: '更新请求超时（HTTP 408），请稍后重试',
+    451: '更新接口因地区或法律限制不可访问（HTTP 451），请前往 GitHub 发布页查看',
+    502: '更新服务网关异常（HTTP 502），请稍后重试',
+    503: 'GitHub 更新服务暂不可用（HTTP 503），请稍后重试',
+    504: '更新服务网关超时（HTTP 504），请稍后重试',
+  };
+  return new UpdateError(messages[status] ?? (status >= 500 && status < 600
+    ? `GitHub 更新服务异常（HTTP ${status}），请稍后重试`
+    : `检查更新失败（HTTP ${status}），请前往 GitHub 发布页查看`));
+}
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new UpdateError('更新信息格式异常，请前往 GitHub 发布页查看');
@@ -88,9 +128,7 @@ export async function checkForUpdates(current: AppVersion, transport: Transport 
       method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal,
       headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
     });
-    if (response.status === 404) throw new UpdateError('暂未发布可用版本，请稍后再检查');
-    if (response.status === 403 || response.status === 429) throw new UpdateError('检查更新次数过多，请稍后重试');
-    if (!response.ok) throw new UpdateError('GitHub 暂时无法访问，请稍后重试');
+    if (!response.ok) throw await responseError(response);
     if (controller.signal.aborted) throw new UpdateError('检查更新超时，请稍后重试');
     let body: unknown;
     try { body = await response.json(); }

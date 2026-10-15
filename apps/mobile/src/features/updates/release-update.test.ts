@@ -59,11 +59,31 @@ test('只接收本仓库的正式 Release 与 APK，不打开外部替换下载�
 });
 
 test('GitHub 未发布、限流、服务错误和损坏响应分别返回可操作提示', async () => {
-  for (const [status, text] of [[404, '暂未发布'], [403, '次数过多'], [429, '次数过多'], [503, '暂时无法访问']] as const) {
+  for (const [status, text] of [[400, '请求被拒绝'], [401, '身份验证'], [403, '拒绝访问'], [404, '未找到'],
+    [408, '请求超时'], [429, '频率受限'], [451, '地区或法律限制'], [500, '服务异常'],
+    [502, '网关异常'], [503, '暂不可用'], [504, '网关超时'], [418, 'HTTP 418']] as const) {
     await expect(checkForUpdates({ version: '1.6', versionCode: 290003 }, async () => new Response('', { status }))).rejects.toThrow(text);
   }
   await expect(checkForUpdates({ version: '1.6', versionCode: 290003 }, async () => new Response('broken-json'))).rejects.toThrow('更新信息格式异常');
   await expect(checkForUpdates({ version: '1.6', versionCode: 290003 }, async () => { throw new Error('network'); })).rejects.toThrow('检查网络');
+});
+
+test('403 仅在有证据时识别为限流，等待时间来自服务器响应', async () => {
+  const current = { version: '1.6', versionCode: 290003 };
+  await expect(checkForUpdates(current, async () => Response.json({ message: 'API rate limit exceeded' }, { status: 403 })))
+    .rejects.toThrow('频率受限（HTTP 403）');
+  await expect(checkForUpdates(current, async () => Response.json({ message: 'Forbidden' }, { status: 403 })))
+    .rejects.toThrow('拒绝访问');
+  await expect(checkForUpdates(current, async () => new Response('', { status: 403, headers: { 'retry-after': '45' } })))
+    .rejects.toThrow('约 45 秒后重试');
+  await expect(checkForUpdates(current, async () => new Response('', { status: 429, headers: { 'retry-after': 'invalid' } })))
+    .rejects.toThrow('请稍后重试');
+  await expect(checkForUpdates(current, async () => new Response('', { status: 403, headers: {
+    'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 120),
+  } }))).rejects.toThrow(/约 1[12]\d 秒后重试/);
+  await expect(checkForUpdates(current, async () => new Response('', { status: 429, headers: {
+    'retry-after': new Date(Date.now() + 60000).toUTCString(),
+  } }))).rejects.toThrow(/约 (59|60) 秒后重试/);
 });
 
 test('离开设置页可以取消检查，已经取消时不会发请求', async () => {
