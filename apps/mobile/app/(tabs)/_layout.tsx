@@ -28,7 +28,7 @@ export default function TabsLayout() {
     tabBar={(props: Parameters<typeof MaterialTopTabBar>[0]) => <View style={{ overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: theme.panel.val, paddingHorizontal: 12, paddingTop: 10, paddingBottom: insets.bottom + 8, shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: -4 }, elevation: 8 }}>
       <MaterialTopTabBar {...props} />
     </View>}
-    screenOptions={{ swipeEnabled: true, animationEnabled: true, lazy: false, tabBarShowIcon: true,
+    screenOptions={{ swipeEnabled: true, animationEnabled: false, lazy: false, tabBarShowIcon: true,
       tabBarIndicator: (props: Omit<SlidingTabIndicatorProps, 'swiping'>) => <SlidingTabIndicator {...props} swiping={swiping} />,
       tabBarActiveTintColor: theme.color.val, tabBarInactiveTintColor: theme.muted.val, tabBarPressColor: 'transparent', tabBarPressOpacity: 1,
       tabBarIndicatorStyle: { height: 68, borderRadius: 19, marginHorizontal: 6, backgroundColor: theme.soft.val }, tabBarLabelStyle: { fontSize: 12, fontWeight: '500', letterSpacing: 0.2 },
