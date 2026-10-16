@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { checkForUpdates, compareVersions, evaluateUpdate, parseRelease, releaseApiUrl, repositoryUrl } from './release-update';
+import { checkForUpdates, compareVersions, createUpdateChecker, evaluateUpdate, parseRelease, releaseManifestUrl, repositoryUrl, updateCacheTtl, type UpdateCacheStorage } from './release-update';
 
 function fixture(version = '1.6', versionCode = 290003, tag = `v${version}`) {
   return {
@@ -9,15 +9,17 @@ function fixture(version = '1.6', versionCode = 290003, tag = `v${version}`) {
   };
 }
 
-test('公开 GitHub 检查只发送无认证 GET，不携带学习通账号或 Cookie', async () => {
+test('只读取静态更新附件，不调用 GitHub API 或携带账号与 Cookie', async () => {
   let requests = 0;
   const result = await checkForUpdates({ version: '1.5', versionCode: 280002 }, async (url, init) => {
     requests++;
-    expect(url).toBe(releaseApiUrl);
+    expect(url).toBe(releaseManifestUrl);
+    expect(url).toBe(`${repositoryUrl}/releases/latest/download/update.json`);
     expect(init.method).toBe('GET'); expect(init.credentials).toBe('omit'); expect(init.body).toBeUndefined();
     const headers = new Headers(init.headers);
     expect(headers.has('cookie')).toBe(false); expect(headers.has('authorization')).toBe(false);
-    expect(headers.get('accept')).toBe('application/vnd.github+json');
+    expect(headers.get('accept')).toBe('application/json');
+    expect(headers.has('x-github-api-version')).toBe(false);
     return Response.json(fixture());
   });
   expect(requests).toBe(1); expect(result.available).toBe(true);
@@ -96,4 +98,130 @@ test('离开设置页可以取消检查，已经取消时不会发请求', async
   }), controller.signal);
   controller.abort();
   await expect(pending).rejects.toThrow('已取消检查更新');
+});
+
+function memoryStorage(initial: string | null = null) {
+  let value = initial;
+  return {
+    async read() { return value; },
+    async write(next: string) { value = next; },
+  } satisfies UpdateCacheStorage;
+}
+
+test('30 分钟内复用缓存，重建检测器仍可读取，且按当前安装版本重新比较', async () => {
+  let time = Date.now(), calls = 0;
+  const storage = memoryStorage();
+  const transport = async () => { calls++; return Response.json(fixture()); };
+  const check = createUpdateChecker(transport, storage, () => time);
+  const current = { version: '1.5', versionCode: 280002 };
+  expect((await check(current)).available).toBe(true);
+  expect((await check(current)).available).toBe(true);
+  const restarted = createUpdateChecker(transport, storage, () => time);
+  expect((await restarted({ version: '1.6', versionCode: 290003 })).available).toBe(false);
+  expect(calls).toBe(1);
+  time += updateCacheTtl;
+  await restarted(current);
+  expect(calls).toBe(2);
+});
+
+test('拒绝损坏、外部下载地址、过期和未来时间的缓存', async () => {
+  const time = Date.now();
+  const invalid = { ...fixture(), html_url: 'https://example.com/release' };
+  for (const saved of ['broken', JSON.stringify({ checkedAt: time, manifest: invalid }),
+    JSON.stringify({ checkedAt: time - updateCacheTtl, manifest: fixture() }),
+    JSON.stringify({ checkedAt: time + 60000, manifest: fixture() })]) {
+    let calls = 0;
+    const check = createUpdateChecker(async () => { calls++; return Response.json(fixture()); }, memoryStorage(saved), () => time);
+    await check({ version: '1.5', versionCode: 280002 });
+    expect(calls).toBe(1);
+  }
+});
+
+test('存储读写失败仍能检测，内存缓存继续生效', async () => {
+  let calls = 0;
+  const check = createUpdateChecker(async () => { calls++; return Response.json(fixture()); }, {
+    async read() { throw new Error('unreadable'); },
+    async write() { throw new Error('unwritable'); },
+  });
+  const current = { version: '1.5', versionCode: 280002 };
+  expect((await check(current)).available).toBe(true);
+  await check(current);
+  expect(calls).toBe(1);
+});
+
+test('并发只发送一次请求，单个调用者取消不影响其他调用者', async () => {
+  let calls = 0;
+  let finish!: (response: Response) => void;
+  let networkSignal: AbortSignal | undefined;
+  const check = createUpdateChecker(async (_url, init) => {
+    calls++; networkSignal = init.signal as AbortSignal;
+    return new Promise<Response>(resolve => { finish = resolve; });
+  }, memoryStorage());
+  const current = { version: '1.5', versionCode: 280002 };
+  const controller = new AbortController();
+  const first = check(current, controller.signal);
+  const second = check(current);
+  await Promise.resolve();
+  controller.abort();
+  await expect(first).rejects.toThrow('已取消');
+  expect(networkSignal?.aborted).toBe(false);
+  finish(Response.json(fixture()));
+  expect((await second).available).toBe(true);
+  expect(calls).toBe(1);
+});
+
+test('全部调用者取消会中止请求，之后可重新检测且不会缓存取消结果', async () => {
+  let calls = 0;
+  let networkSignal: AbortSignal | undefined;
+  const check = createUpdateChecker(async (_url, init) => {
+    calls++;
+    if (calls > 1) return Response.json(fixture());
+    networkSignal = init.signal as AbortSignal;
+    return new Promise<Response>((_resolve, reject) => networkSignal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+  }, memoryStorage());
+  const current = { version: '1.5', versionCode: 280002 };
+  await expect(check(current, AbortSignal.abort())).rejects.toThrow('已取消');
+  expect(calls).toBe(0);
+  const controller = new AbortController();
+  const pending = check(current, controller.signal);
+  await Promise.resolve();
+  controller.abort();
+  await expect(pending).rejects.toThrow('已取消');
+  expect(networkSignal?.aborted).toBe(true);
+  expect((await check(current)).available).toBe(true);
+  expect(calls).toBe(2);
+});
+
+test('明确限流期间不重复请求，到期后恢复；普通网络失败允许重试', async () => {
+  let time = Date.now(), calls = 0;
+  const current = { version: '1.5', versionCode: 280002 };
+  const check = createUpdateChecker(async () => {
+    calls++;
+    return calls === 1 ? new Response('', { status: 429, headers: { 'retry-after': '120' } }) : Response.json(fixture());
+  }, memoryStorage(), () => time);
+  await expect(check(current)).rejects.toThrow('频率受限');
+  await expect(check(current)).rejects.toThrow('暂受限');
+  expect(calls).toBe(1);
+  time += 121000;
+  expect((await check(current)).available).toBe(true);
+  expect(calls).toBe(2);
+
+  let failures = 0;
+  const retry = createUpdateChecker(async () => {
+    if (failures++ === 0) throw new Error('offline');
+    return Response.json(fixture());
+  }, memoryStorage());
+  await expect(retry(current)).rejects.toThrow('检查网络');
+  expect((await retry(current)).available).toBe(true);
+});
+
+test('过期缓存不能把网络错误当成已是最新，缺少静态附件也不回退 GitHub API', async () => {
+  let calls = 0;
+  const storage = memoryStorage(JSON.stringify({ checkedAt: Date.now() - updateCacheTtl, manifest: fixture() }));
+  const check = createUpdateChecker(async url => {
+    calls++; expect(url).toBe(releaseManifestUrl);
+    return new Response('', { status: 404 });
+  }, storage);
+  await expect(check({ version: '1.6', versionCode: 290003 })).rejects.toThrow('未找到');
+  expect(calls).toBe(1);
 });

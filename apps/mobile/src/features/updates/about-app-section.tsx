@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Constants from 'expo-constants';
-import { fetch as nativeFetch } from 'expo/fetch';
 import { ActivityIndicator, Linking, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Button, Text, XStack, YStack, useTheme } from 'tamagui';
 import appConfig from '../../../app.json';
 import { GroupedList, SectionTitle } from '../../ui';
-import { checkForUpdates, latestReleaseUrl, repositoryUrl, type AppRelease } from './release-update';
+import { latestReleaseUrl, repositoryUrl, type AppRelease } from './release-update';
+import { checkCachedUpdates } from './update-checker';
 
 function AboutIcon({ kind }: { kind: 'update' | 'repo' }) {
   const theme = useTheme();
@@ -69,7 +69,7 @@ export function AboutAppSection() {
     pending.current = controller;
     setChecking(true); setFailed(false); setMessage('正在获取最新版本…');
     try {
-      const result = await checkForUpdates(current, (url, init) => nativeFetch(url, init), controller.signal);
+      const result = await checkCachedUpdates(current, controller.signal);
       if (!mounted.current || controller.signal.aborted) return;
       if (result.available) {
         setRelease(result.release); setDialogOpen(true);

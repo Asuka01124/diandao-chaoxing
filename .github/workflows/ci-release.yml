@@ -133,5 +133,5 @@ jobs:
             gh release create "$TAG" --verify-tag --draft --target "$GITHUB_SHA" --title "到点 $VERSION" --notes-file RELEASE_NOTES.md
           fi
           test "$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)" = "$GITHUB_SHA"
-          gh release upload "$TAG" "$APK" SHA256SUMS --clobber
+          gh release upload "$TAG" "$APK" update.json SHA256SUMS --clobber
           gh release edit "$TAG" --draft=false --latest --title "到点 $VERSION" --notes-file RELEASE_NOTES.md

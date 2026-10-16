@@ -1,6 +1,6 @@
 export const repositoryUrl = 'https://github.com/Asuka01124/diandao-chaoxing';
-export const releaseApiUrl = 'https://api.github.com/repos/Asuka01124/diandao-chaoxing/releases/latest';
 export const latestReleaseUrl = `${repositoryUrl}/releases/latest`;
+export const releaseManifestUrl = `${latestReleaseUrl}/download/update.json`;
 
 export type AppVersion = { version: string; versionCode: number };
 export type AppRelease = {
@@ -8,8 +8,10 @@ export type AppRelease = {
 };
 export type UpdateResult = { available: boolean; release: AppRelease };
 type UpdateResponse = { ok: boolean; status: number; headers?: Pick<Headers, 'get'>; json(): Promise<unknown> };
-type Transport = (url: string, init: RequestInit) => Promise<UpdateResponse>;
-export class UpdateError extends Error {}
+export type Transport = (url: string, init: RequestInit) => Promise<UpdateResponse>;
+export class UpdateError extends Error {
+  constructor(message: string, readonly retryAt?: number) { super(message); }
+}
 
 async function responseError(response: UpdateResponse): Promise<UpdateError> {
   const { status, headers } = response;
@@ -31,7 +33,8 @@ async function responseError(response: UpdateResponse): Promise<UpdateError> {
         if (reset && /^\d+$/.test(reset)) seconds = Number(reset) - Date.now() / 1000;
       }
       const retry = Number.isFinite(seconds) && seconds > 0 ? `请约 ${Math.ceil(seconds)} 秒后重试` : '请稍后重试';
-      return new UpdateError(`GitHub 请求频率受限（HTTP ${status}），${retry}`);
+      return new UpdateError(`GitHub 请求频率受限（HTTP ${status}），${retry}`,
+        Date.now() + (Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) * 1000 : 60000));
     }
     return new UpdateError('GitHub 拒绝访问更新接口（HTTP 403），请尝试更换网络或前往发布页查看');
   }
@@ -117,23 +120,24 @@ export function evaluateUpdate(current: AppVersion, release: AppRelease): Update
   throw new UpdateError('无法确认该版本的构建信息，请前往 GitHub 发布页查看');
 }
 
-export async function checkForUpdates(current: AppVersion, transport: Transport = fetch, signal?: AbortSignal): Promise<UpdateResult> {
+async function fetchManifest(transport: Transport, signal?: AbortSignal): Promise<unknown> {
   if (signal?.aborted) throw new UpdateError('已取消检查更新');
   const controller = new AbortController();
   const cancel = () => controller.abort();
   signal?.addEventListener('abort', cancel, { once: true });
   const timeout = setTimeout(cancel, 15000);
   try {
-    const response = await transport(releaseApiUrl, {
+    const response = await transport(releaseManifestUrl, {
       method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal,
-      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+      headers: { Accept: 'application/json' },
     });
     if (!response.ok) throw await responseError(response);
     if (controller.signal.aborted) throw new UpdateError('检查更新超时，请稍后重试');
     let body: unknown;
     try { body = await response.json(); }
     catch { throw new UpdateError(controller.signal.aborted ? '检查更新超时，请稍后重试' : '更新信息格式异常，请前往 GitHub 发布页查看'); }
-    return evaluateUpdate(current, parseRelease(body));
+    parseRelease(body);
+    return body;
   } catch (error) {
     if (error instanceof UpdateError) throw error;
     throw new UpdateError(signal?.aborted ? '已取消检查更新' : controller.signal.aborted ? '检查更新超时，请稍后重试' : '无法检查更新，请检查网络后重试');
@@ -141,4 +145,79 @@ export async function checkForUpdates(current: AppVersion, transport: Transport 
     clearTimeout(timeout);
     signal?.removeEventListener('abort', cancel);
   }
+}
+
+export async function checkForUpdates(current: AppVersion, transport: Transport = fetch, signal?: AbortSignal): Promise<UpdateResult> {
+  return evaluateUpdate(current, parseRelease(await fetchManifest(transport, signal)));
+}
+
+export const updateCacheTtl = 30 * 60 * 1000;
+type UpdateCache = { checkedAt: number; manifest: unknown };
+export type UpdateCacheStorage = { read(): Promise<string | null>; write(value: string): Promise<void> };
+
+// 同一实例跨页面复用；每位调用者独立取消，最后一位退出时中止网络请求。
+export function createUpdateChecker(transport: Transport, storage: UpdateCacheStorage, now = Date.now) {
+  let cache: UpdateCache | null = null;
+  let loaded = false;
+  let limited: UpdateError | null = null;
+  let pending: { controller: AbortController; promise: Promise<AppRelease>; users: number } | null = null;
+
+  async function load(signal: AbortSignal): Promise<AppRelease> {
+    if (!loaded) {
+      try {
+        const value = await storage.read();
+        if (value) {
+          const saved = record(JSON.parse(value));
+          if (typeof saved.checkedAt === 'number' && Number.isFinite(saved.checkedAt)) {
+            parseRelease(saved.manifest);
+            cache = { checkedAt: saved.checkedAt, manifest: saved.manifest };
+          }
+        }
+      } catch { /* 缓存损坏或不可读时重新检测。 */ }
+      loaded = true;
+    }
+    if (signal.aborted) throw new UpdateError('已取消检查更新');
+    if (cache && now() >= cache.checkedAt && now() - cache.checkedAt < updateCacheTtl) return parseRelease(cache.manifest);
+    if (limited?.retryAt && now() < limited.retryAt) {
+      throw new UpdateError(`更新检测暂受限，请约 ${Math.ceil((limited.retryAt - now()) / 1000)} 秒后重试`, limited.retryAt);
+    }
+    let manifest: unknown;
+    try { manifest = await fetchManifest(transport, signal); }
+    catch (error) {
+      if (error instanceof UpdateError && error.retryAt) limited = error;
+      throw error;
+    }
+    if (signal.aborted) throw new UpdateError('已取消检查更新');
+    cache = { checkedAt: now(), manifest };
+    limited = null;
+    try { await storage.write(JSON.stringify(cache)); }
+    catch { /* 写入失败仍保留本次结果与内存缓存。 */ }
+    return parseRelease(manifest);
+  }
+
+  return async function check(current: AppVersion, signal?: AbortSignal): Promise<UpdateResult> {
+    if (signal?.aborted) throw new UpdateError('已取消检查更新');
+    if (!pending) {
+      const controller = new AbortController();
+      pending = { controller, promise: load(controller.signal), users: 0 };
+    }
+    const operation = pending;
+    operation.users++;
+    let cancel: (() => void) | undefined;
+    try {
+      const release = await new Promise<AppRelease>((resolve, reject) => {
+        cancel = () => reject(new UpdateError('已取消检查更新'));
+        signal?.addEventListener('abort', cancel, { once: true });
+        operation.promise.then(resolve, reject);
+      });
+      return evaluateUpdate(current, release);
+    } finally {
+      if (cancel) signal?.removeEventListener('abort', cancel);
+      operation.users--;
+      if (operation.users === 0) {
+        operation.controller.abort();
+        if (pending === operation) pending = null;
+      }
+    }
+  };
 }
