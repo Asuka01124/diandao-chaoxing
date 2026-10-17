@@ -135,7 +135,7 @@ test('签到前解析失败明确说明未提交，重试不会绕过核查', as
   behavior.prepare = async () => { throw new FakeClientError('PROVIDER_CHANGED', '无法确认远端签到状态'); };
   const job = await createJob(state, activity, ['a'], { kind: 'click' });
   await runJob(state, job.id);
-  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 0, message: '签到前核查失败，未提交：无法确认远端签到状态' });
+  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 0, message: '签到前检查未通过：无法确认远端签到状态' });
   await retryAttempt(state, job.id, 'a');
   expect(state.get().attempts[0].count).toBe(0);
   expect(providerCalls).not.toContain('status');
@@ -157,7 +157,7 @@ test('准备阶段超时不进入提交核验，也不增加次数', async () =>
   const state = store();
   behavior.prepare = async () => { throw new FakeClientError('NETWORK_TIMEOUT', '预签到请求超时'); };
   const job = await createJob(state, activity, ['a'], { kind: 'click' }); await runJob(state, job.id);
-  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 0, message: '签到前核查失败，未提交：预签到请求超时' });
+  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 0, message: '签到前检查未通过：预签到请求超时' });
   expect(providerCalls).toEqual(['check', 'submit']);
 });
 

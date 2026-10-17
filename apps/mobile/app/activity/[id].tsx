@@ -19,7 +19,7 @@ export default function ActivityScreen() {
   useEffect(() => { if (activity && account && !isDemoActivity(activity)) void refresh(); }, [id, accountId]);
   if (!data || !activity) return null;
   async function refresh(manual = false) {
-    if (!account || !activity) return; setBusy(true); setStatus({ tone: 'loading', message: '正在核对活动状态…' });
+    if (!account || !activity) return; setBusy(true); setStatus({ tone: 'loading', message: '正在查看签到状态…' });
     try {
       if (isDemoActivity(activity)) return;
       const session = await api.check(account.session);
@@ -27,13 +27,13 @@ export default function ActivityScreen() {
       let signed: boolean | null = null;
       let warning = '';
       try { const status = await api.status(session, detail); signed = status.state === 'SIGNED' ? true : status.state === 'READY' || status.state === 'EXPIRED' ? false : null; }
-      catch { warning = '活动详情已更新，远端签到状态暂时无法确认'; }
+      catch { warning = '详情已更新，暂时无法确认是否已签到，请刷新重试'; }
       await store.update(v => { const item = v.accounts.find(a => a.id === account.id); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } const index = v.activityCache.findIndex(a => a.id === detail.id && a.cacheAccountId === account.id); if (index >= 0) v.activityCache[index] = { ...detail, cacheAccountId: account.id, signed }; });
       const message = warning || '活动状态已更新';
       setStatus(warning ? { tone: 'error', message } : null);
       if (manual && !warning) notify(message, 'success');
     }
-    catch (e) { const message = e instanceof Error ? e.message : '详情读取失败'; setStatus({ tone: 'error', message }); } finally { setBusy(false); }
+    catch (e) { const message = e instanceof Error ? e.message : '加载详情失败'; setStatus({ tone: 'error', message }); } finally { setBusy(false); }
   }
   async function openSignOut() {
     if (!account || !activity?.relation?.signOutId) return; setBusy(true); setStatus({ tone: 'loading', message: '正在打开签退活动…' });
@@ -41,19 +41,19 @@ export default function ActivityScreen() {
       const related = await api.detail(account.session, { ...activity, id: activity.relation.signOutId, title: `${activity.title} · 签退`, phase: 'sign-out', relation: undefined, signed: null });
       await store.update(v => { v.activityCache = [...v.activityCache.filter(a => a.id !== related.id || a.cacheAccountId !== account.id), { ...related, cacheAccountId: account.id }]; });
       router.push({ pathname: '/activity/[id]', params: { id: related.id, accountId: account.id } });
-    } catch (e) { const message = e instanceof Error ? e.message : '签退活动读取失败'; setStatus({ tone: 'error', message }); } finally { setBusy(false); }
+    } catch (e) { const message = e instanceof Error ? e.message : '加载签退活动失败'; setStatus({ tone: 'error', message }); } finally { setBusy(false); }
   }
   const ended = activityPhase(activity) === 'ended';
   const requirement = activity.requirements ? [activity.requirements.captcha && '验证码', activity.requirements.face && '人脸', activity.requirements.location && '位置', activity.requirements.photo && '照片'].filter(Boolean).join('、') : '';
   if (isDemoActivity(activity)) return <AppScreen title="活动已移除"><EmptyState title="该活动已移除" detail="请从课程列表打开当前签到活动" /></AppScreen>;
   return <AppScreen title={activity.title} subtitle={account?.label} footer={!ended && activity.kind !== 'unknown' ? <PrimaryButton onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })}>选择账号签到</PrimaryButton> : undefined}>
     {status && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <HeroCard eyebrow={ended ? '已结束' : '进行中'} title={activity.signed === true ? '你已签到' : activity.signed === false ? '你未签到' : '正在读取签到状态'} detail={ended ? undefined : '可选择账号，帮同学完成签到。'} />
+    <HeroCard eyebrow={ended ? '已结束' : '进行中'} title={activity.signed === true ? '你已签到' : activity.signed === false ? '你未签到' : '暂未确认是否已签到'} detail={ended ? undefined : '选择需要签到的账号。'} />
     <SectionTitle>签到信息</SectionTitle><GroupedList>
       {!!activity.endTime && <SettingsRow title="截止时间" detail={new Date(activity.endTime).toLocaleString()} />}
-      {!!requirement && <SettingsRow title="需要" detail={requirement} />}
+      {!!requirement && <SettingsRow title="签到要求" detail={requirement} />}
       {activity.relation?.signOutId && <SettingsRow title="签退" detail={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? '尚未开始' : '点击查看'} onPress={activity.relation.signOutPublishTime && activity.relation.signOutPublishTime > Date.now() ? undefined : () => { void openSignOut(); }} />}
     </GroupedList>
-    <YStack marginTop={16}><PrimaryButton onPress={() => { void refresh(true); }} loading={busy} disabled={!account}>更新状态</PrimaryButton></YStack>
+    <YStack marginTop={16}><PrimaryButton onPress={() => { void refresh(true); }} loading={busy} disabled={!account}>刷新状态</PrimaryButton></YStack>
   </AppScreen>;
 }

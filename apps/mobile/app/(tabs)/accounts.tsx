@@ -20,10 +20,10 @@ export default function AccountsScreen() {
   async function add() {
     if (!identifier.trim() || !password) { notify('请输入账号和密码', 'error'); return; }
     setBusy(true);
-    notify(reauthId ? '正在重新登录账号…' : '正在添加代签账号…', 'loading');
+    notify(reauthId ? '正在重新登录…' : '正在添加代签账号…', 'loading');
     try {
       await saveLogin(store, identifier, password, { label, reauthId: reauthId ?? undefined, role: 'delegate' });
-      const message = reauthId ? '账号已重新登录' : '代签账号已添加';
+      const message = reauthId ? '已重新登录' : '代签账号已添加';
       notify(message, 'success');
       setIdentifier(''); setLabel(''); setReauthId(null);
     } catch (e) { const message = e instanceof Error ? e.message : '添加账号失败'; notify(message, 'error'); }
@@ -52,12 +52,12 @@ export default function AccountsScreen() {
     detail={account.state === 'REAUTH_REQUIRED' ? '需要重新登录' : account.session.identifier}
     symbol="代" onPress={() => setSelected(account.id)}
     accessory={<Text color="$brand" fontSize={13} fontWeight="600">管理 ›</Text>} />;
-  return <AppScreen title="代签账号" subtitle="添加和管理同学的账号" keyboardAware>
-    <SectionTitle>代签账号</SectionTitle><GroupedList>{delegates.length ? delegates.map(accountRow) : <EmptyState title="还没有代签账号" detail="在下方添加同学的账号" />}</GroupedList>
-    <SectionTitle>{reauthId ? '重新登录账号' : '添加代签账号'}</SectionTitle>
+  return <AppScreen title="代签账号" subtitle="添加账号，帮同学签到" keyboardAware>
+    <SectionTitle>代签账号</SectionTitle><GroupedList>{delegates.length ? delegates.map(accountRow) : <EmptyState title="还没有代签账号" detail="在下方输入账号和密码即可添加" />}</GroupedList>
+    <SectionTitle>{reauthId ? '重新登录' : '添加代签账号'}</SectionTitle>
     <YStack backgroundColor="$panel" borderRadius="$radius.panel" padding={18} gap={12}>
-      <Text color="$muted" fontSize={12} fontWeight="600">显示名称</Text>
-      <GlassInput placeholder="显示名称（可选）" value={label} onChangeText={setLabel} accessibilityLabel="显示名称" />
+      <Text color="$muted" fontSize={12} fontWeight="600">备注名</Text>
+      <GlassInput placeholder="备注名（可选）" value={label} onChangeText={setLabel} accessibilityLabel="备注名" />
       <Text color="$muted" fontSize={12} fontWeight="600">学习通账号</Text>
       <GlassInput placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" accessibilityLabel="账号" />
       <Text color="$muted" fontSize={12} fontWeight="600">密码</Text>

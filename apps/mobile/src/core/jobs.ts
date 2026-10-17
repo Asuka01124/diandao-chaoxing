@@ -10,7 +10,7 @@ export async function createJob(store: VaultAccess, activity: Activity, accountI
   validateActivityInput(activity, input);
   if (input.kind === 'photo' && !photoUri && accountIds.some(id => !input.mediaIdByAccount[id])) throw new Error('缺少签到照片');
   if (!accountIds.length || new Set(accountIds).size !== accountIds.length) throw new Error('请选择至少一个有效账号');
-  if (accountIds.some(id => !store.get().accounts.some(account => account.id === id))) throw new Error('账号列表已变化');
+  if (accountIds.some(id => !store.get().accounts.some(account => account.id === id))) throw new Error('账号列表已更新，请重新选择');
   const job: Job = { id: randomUUID(), activity, accountIds, input, photoUri, createdAt: new Date().toISOString(), state: 'RUNNING' };
   await store.update(data => {
     data.jobs.push(job);
@@ -53,7 +53,7 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
       const current = store.get().jobs.find(j => j.id === job.id);
       photoMediaId = current?.input.kind === 'photo' ? current.input.mediaIdByAccount[accountId] : undefined;
       if (!photoMediaId) {
-        if (!job.photoUri) throw new Error('临时照片缺失');
+        if (!job.photoUri) throw new Error('照片已丢失，请重新选择');
         const { readStagedPhoto } = await import('./media');
         photoMediaId = (await api.upload(session, await readStagedPhoto(job.photoUri))).mediaId;
         const savedId = photoMediaId;
@@ -71,7 +71,7 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
     }
     catch (error) {
       if (requestStarted && error instanceof ClientError && error.code === 'NETWORK_TIMEOUT') {
-        await setAttempt(store, job.id, accountId, 'VERIFYING', '提交超时，正在核查远端状态');
+        await setAttempt(store, job.id, accountId, 'VERIFYING', '提交超时，正在确认是否已签到');
         const remote = await api.status(session, job.activity);
         if (remote.state === 'SIGNED') { await setAttempt(store, job.id, accountId, 'SUCCESS'); return 'continue'; }
       }
@@ -95,7 +95,7 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
     const phase = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId)?.state;
     const message = client?.message ?? '执行失败';
     await setAttempt(store, job.id, accountId, state,
-      state === 'FAILED' && phase === 'PREFLIGHT' ? `签到前核查失败，未提交：${message}` : message,
+      state === 'FAILED' && phase === 'PREFLIGHT' ? `签到前检查未通过：${message}` : message,
       client?.code ?? 'UNKNOWN');
     return state === 'WAITING_QR' ? 'wait' : 'continue';
   }
@@ -139,7 +139,7 @@ export async function replaceQrAndResume(store: VaultAccess, jobId: string, qrPa
   if (!Number.isFinite(age) || age > 120_000 || age < -30_000) throw new Error('二维码扫描时间无效或已过期，请重新扫描');
   await store.update(data => {
     const job = data.jobs.find(j => j.id === jobId);
-    if (!job || job.input.kind !== 'qr' || !data.attempts.some(a => a.jobId === jobId && a.state === 'WAITING_QR')) throw new Error('任务当前不在等待二维码');
+    if (!job || job.input.kind !== 'qr' || !data.attempts.some(a => a.jobId === jobId && a.state === 'WAITING_QR')) throw new Error('当前任务无需重新扫码');
     job.input = { ...job.input, qrPayload, scannedAt };
     for (const attempt of data.attempts) if (attempt.jobId === jobId && attempt.state === 'WAITING_QR') attempt.state = 'QUEUED';
     job.state = 'RUNNING';
@@ -149,7 +149,7 @@ export async function replaceQrAndResume(store: VaultAccess, jobId: string, qrPa
 export async function retryAttempt(store: VaultAccess, jobId: string, accountId: string): Promise<void> {
   const attempt = store.get().attempts.find(a => a.jobId === jobId && a.accountId === accountId);
   if (!attempt || !['FAILED', 'REAUTH_REQUIRED'].includes(attempt.state)) throw new Error('该账号当前不能重试');
-  if (attempt.state === 'REAUTH_REQUIRED' && accountFor(store, accountId)?.state !== 'VALID') throw new Error('请先在账号页重新授权');
+  if (attempt.state === 'REAUTH_REQUIRED' && accountFor(store, accountId)?.state !== 'VALID') throw new Error('请先重新登录该账号');
   const job = store.get().jobs.find(j => j.id === jobId);
   if (job?.input.kind === 'photo' && !job.input.mediaIdByAccount[accountId] && !job.photoUri) throw new Error('临时照片已清理，请重新选择');
   await setAttempt(store, jobId, accountId, 'QUEUED');
@@ -171,11 +171,11 @@ export async function checkChallenge(store: VaultAccess, jobId: string, accountI
   const job = store.get().jobs.find(j => j.id === jobId);
   const account = accountFor(store, accountId);
   const attempt = store.get().attempts.find(a => a.jobId === jobId && a.accountId === accountId);
-  if (!job || !account || !attempt || !['WAITING_CAPTCHA', 'WAITING_FACE'].includes(attempt.state)) throw new Error('没有待核查的验证');
+  if (!job || !account || !attempt || !['WAITING_CAPTCHA', 'WAITING_FACE'].includes(attempt.state)) throw new Error('当前账号没有待处理的验证');
   const result = await api.status(account.session, job.activity);
-  if (result.state === 'SIGNED') { await setAttempt(store, jobId, accountId, 'SUCCESS', '已在第三方完成验证'); await runJob(store, jobId); }
+  if (result.state === 'SIGNED') { await setAttempt(store, jobId, accountId, 'SUCCESS', '已在学习通完成验证'); await runJob(store, jobId); }
   else if (result.state === 'EXPIRED') { await setAttempt(store, jobId, accountId, 'EXPIRED'); await runJob(store, jobId); }
-  else throw new Error('远端仍未显示签到成功，请先完成验证');
+  else throw new Error('学习通仍显示未签到，请先完成验证');
 }
 export async function provideFaceAndResume(store: VaultAccess, jobId: string, accountId: string, mediaId: string): Promise<void> {
   await store.update(data => {

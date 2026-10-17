@@ -11,7 +11,7 @@ export function courseAttendanceGroups(cache: Activity[], accountId: string, cou
 }
 
 export function attendanceRow(activity: Activity) {
-  const label = activity.signed === true ? '已签到' : activity.signed === false ? '未签到' : '待核查';
+  const label = activity.signed === true ? '已签到' : activity.signed === false ? '未签到' : '待确认';
   const phase = activityPhase(activity) === 'ended' ? '已结束' : '进行中';
   return { detail: `${label} · ${phase}`, symbol: activity.signed === true ? '✓' : activity.signed === false ? '–' : '?' };
 }

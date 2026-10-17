@@ -10,13 +10,13 @@ export async function saveLogin(store: VaultAccess, identifier: string, password
   await store.update(v => {
     if (options.reauthId) {
       const item = v.accounts.find(a => a.id === options.reauthId);
-      if (!item || item.session.identifier !== session.identifier || item.session.userId !== session.userId) throw new Error('重新登录的账号身份不匹配');
+      if (!item || item.session.identifier !== session.identifier || item.session.userId !== session.userId) throw new Error('请使用原账号重新登录');
       item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString();
     } else {
       const existing = v.accounts.find(a => a.session.identifier === session.identifier);
       const role = options.role ?? 'delegate';
       if (existing && role !== 'primary') throw new Error('该账号已添加');
-      if (existing && existing.session.userId !== session.userId) throw new Error('账号身份与已有资料不匹配');
+      if (existing && existing.session.userId !== session.userId) throw new Error('账号信息与已保存的资料不一致，请核对账号');
       if (role === 'primary') for (const item of v.accounts) item.role = 'delegate';
       if (existing) {
         existing.role = 'primary'; existing.session = session; existing.state = 'VALID'; existing.verifiedAt = new Date().toISOString();

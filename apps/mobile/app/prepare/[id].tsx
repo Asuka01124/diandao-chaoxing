@@ -46,11 +46,11 @@ export default function PrepareScreen() {
       return { kind: 'qr', qrPayload: qr, scannedAt, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'photo') return { kind: 'photo', mediaIdByAccount: {}, ...(location ? { location } : {}) };
-    throw new Error('当前活动类型尚未接入安全提交');
+    throw new Error('暂不支持此类签到，请在学习通中完成');
   }
   async function pickPhoto(camera: boolean) {
     const picked = camera ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.5 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 });
-    if (!picked.canceled) { setPhotoUri(picked.assets[0].uri); setReservedPhotoId(null); setPhotoLabel(camera ? '本次拍摄照片' : '从相册选择的照片'); setError(''); notify('签到照片已选择', 'success'); }
+    if (!picked.canceled) { setPhotoUri(picked.assets[0].uri); setReservedPhotoId(null); setPhotoLabel(camera ? '刚拍的照片' : '相册照片'); setError(''); notify('签到照片已选择', 'success'); }
     else notify('已取消选择照片', 'info');
   }
   async function start() {
@@ -66,9 +66,9 @@ export default function PrepareScreen() {
       }
       const job = await createJob(store, activity, selected, prepared, stagedUri);
       stagedUri = undefined;
-      notify('任务已创建，正在执行', 'success');
+      notify('正在签到，请查看结果', 'success');
       router.replace({ pathname: '/job/[id]', params: { id: job.id } });
-      void runJob(store, job.id).catch(e => notify(e instanceof Error ? e.message : '任务执行失败，请查看结果', 'error'));
+      void runJob(store, job.id).catch(e => notify(e instanceof Error ? e.message : '签到失败，请查看结果', 'error'));
     }
     catch (e) { if (stagedUri) clearStagedPhoto(stagedUri); setError(prepareErrorMessage(e, activity?.kind ?? 'unknown')); }
     finally { setBusy(false); }
@@ -79,17 +79,17 @@ export default function PrepareScreen() {
     {!selected.length && <Message>请先选择至少一个账号</Message>}
     <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>{`为 ${selected.length} 个账号签到`}</PrimaryButton>
   </YStack>}>
-    <HeroCard eyebrow="签到准备" title={`${selected.length} 个账号已选择`} detail="确认参与账号，再补充本次签到要求的信息。" />
+    <HeroCard eyebrow="签到准备" title={`已选 ${selected.length} 个账号`} detail="选择账号，并按要求填写签到信息。" />
     <SectionTitle>选择账号</SectionTitle><GroupedList>{data.accounts.map(a => <SettingsRow key={a.id} title={a.label} detail={a.role === 'primary' ? '我的账号' : undefined} onPress={() => { setError(''); setSelected(ids => ids.includes(a.id) ? ids.filter(id => id !== a.id) : [...ids, a.id]); }} accessory={<Text color="$brand" fontSize={20}>{selected.includes(a.id) ? '✓' : '○'}</Text>} />)}</GroupedList>
-    {needsLocation && <><SectionTitle>签到位置</SectionTitle><GroupedList><SettingsRow title={location?.address ?? '尚未选择位置'} detail={location ? '点击可在地图上重新选点' : '点击打开地图，选择签到地点'} symbol="⌖" onPress={() => setMapOpen(true)} /></GroupedList></>}
-    {needsLocation && !!data.settings.favoriteLocations.length && <><SectionTitle>收藏位置</SectionTitle><GroupedList>{data.settings.favoriteLocations.map((item, index) => <SettingsRow key={index} title={item.address} detail="点击使用此位置" selected={location?.latitude === item.latitude && location?.longitude === item.longitude} onPress={() => { setLocation(item); setError(''); notify('已选用收藏位置', 'success'); }} />)}</GroupedList></>}
+    {needsLocation && <><SectionTitle>签到位置</SectionTitle><GroupedList><SettingsRow title={location?.address ?? '尚未选择位置'} detail={location ? '点击更换位置' : '点击地图选择签到位置'} symbol="⌖" onPress={() => setMapOpen(true)} /></GroupedList></>}
+    {needsLocation && !!data.settings.favoriteLocations.length && <><SectionTitle>常用位置</SectionTitle><GroupedList>{data.settings.favoriteLocations.map((item, index) => <SettingsRow key={index} title={item.address} detail="点击使用此位置" selected={location?.latitude === item.latitude && location?.longitude === item.longitude} onPress={() => { setLocation(item); setError(''); notify('已选用常用位置', 'success'); }} />)}</GroupedList></>}
     <MapPicker visible={mapOpen} initial={location} onClose={() => setMapOpen(false)} onPick={point => { setLocation(point); setError(''); notify('签到位置已选择', 'success'); }} />
-    {activity.kind === 'code' && <><SectionTitle>签到码</SectionTitle><GlassInput placeholder="请输入数字签到码" value={code} onChangeText={value => { setCode(value); setError(''); }} keyboardType="number-pad" /></>}
+    {activity.kind === 'code' && <><SectionTitle>签到码</SectionTitle><GlassInput placeholder="请输入 4 至 12 位数字签到码" value={code} onChangeText={value => { setCode(value); setError(''); }} keyboardType="number-pad" /></>}
     {activity.kind === 'gesture' && <><SectionTitle>手势签到</SectionTitle><GesturePatternPicker value={gesture} onChange={value => { setGesture(value); setError(''); }} /></>}
     {activity.kind === 'qr' && <><SectionTitle>二维码</SectionTitle><YStack gap={10}><Message>{scannedAt && qr === qrPayload ? `已于 ${new Date(scannedAt).toLocaleTimeString()} 扫描` : '请扫描当前活动的二维码'}</Message>
-      <PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } })}>打开扫码</PrimaryButton></YStack></>}
+      <PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } })}>扫描二维码</PrimaryButton></YStack></>}
     {activity.kind === 'photo' && <><SectionTitle>签到照片</SectionTitle><YStack gap={12}>
-      <Message>{photoUri ? '确认后将按账号分别上传这张照片' : '直接选择下方的预留照片，也可以拍摄或从相册选择'}</Message>
+      <Message>{photoUri ? '所选账号都将使用这张照片签到' : '可用预留照片，也可拍照或从相册选择'}</Message>
       {photoUri && <GroupedList><XStack padding={14} alignItems="center" gap={13}>
         <Image source={{ uri: photoUri }} resizeMode="cover" accessibilityLabel="当前选择的签到照片预览" style={{ width: 68, height: 68, borderRadius: 12 }} />
         <YStack flex={1} gap={3}><Text color="$muted" fontSize={12}>当前选择</Text><Text color="$color" fontSize={16} fontWeight="600" numberOfLines={2}>{photoLabel}</Text></YStack>
@@ -101,7 +101,7 @@ export default function PrepareScreen() {
             if (!reservedPhotoExists(photo.id)) { notify('这张预留照片已丢失，请在设置中删除后重新添加', 'error'); return; }
             setReservedPhotoId(photo.id); setPhotoUri(reservedPhotoUri(photo.id)); setPhotoLabel(photoName(photo, index)); setError(''); notify('预留照片已选择', 'success');
           }} />)}</GroupedList></>}
-      <XStack gap={10}><YStack flex={1}><PrimaryButton onPress={() => { void pickPhoto(true).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>直接拍照</PrimaryButton></YStack>
+      <XStack gap={10}><YStack flex={1}><PrimaryButton onPress={() => { void pickPhoto(true).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>拍照</PrimaryButton></YStack>
         <YStack flex={1}><PrimaryButton onPress={() => { void pickPhoto(false).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>从相册选择</PrimaryButton></YStack></XStack>
       {!data.settings.reservedPhotos.length && <Message>暂无预留照片，可在设置中添加，最多 10 张。</Message>}
     </YStack></>}

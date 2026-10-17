@@ -35,7 +35,7 @@ export default function CourseActivitiesScreen() {
       });
       if (manual) notify(`已更新 ${activities.length} 个签到活动`, 'success');
     } catch (e) {
-      const message = e instanceof Error ? e.message : '签到活动读取失败';
+      const message = e instanceof Error ? e.message : '加载签到活动失败';
       if (manual) notify(message, 'error');
       else setError(message);
     }
@@ -47,7 +47,7 @@ export default function CourseActivitiesScreen() {
   const count = groups.unsigned.length + groups.signed.length + groups.unknown.length;
   const rows = (items: Activity[], emptyTitle: string) => <GroupedList>{items.length ? items.map(a => <SettingsRow key={a.id} title={a.title}
     {...attendanceRow(a)} onPress={() => router.push({ pathname: '/activity/[id]', params: { id: a.id, accountId: account?.id } })} />)
-    : <EmptyState title={busy ? '正在读取…' : emptyTitle} />}</GroupedList>;
+    : <EmptyState title={busy ? '正在加载…' : emptyTitle} />}</GroupedList>;
   return <AppScreen title={name || '课程签到'} headerAction={<Pressable accessibilityRole="button" accessibilityLabel={busy ? '正在刷新签到活动' : '刷新签到活动'} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void refresh(true); }}
     style={({ pressed }) => ({ width: 52, height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.panel.val, opacity: busy ? 0.65 : pressed ? 0.6 : 1, shadowColor: '#000000', shadowOpacity: 0.05, shadowRadius: 13, shadowOffset: { width: 0, height: 4 }, elevation: 2 })}>
     {busy ? <ActivityIndicator size="small" color={theme.brand.val} /> : <Svg width={23} height={23} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Path d="M20 11a8 8 0 1 1-2.5-5.8M20 4v6h-6" stroke={theme.muted.val} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
@@ -56,7 +56,7 @@ export default function CourseActivitiesScreen() {
     {(!error || count > 0) && <>
       <SectionTitle>未签到</SectionTitle>{rows(groups.unsigned, '暂无未签到活动')}
       <SectionTitle>已签到</SectionTitle>{rows(groups.signed, '暂无已签到活动')}
-      {!!groups.unknown.length && <><SectionTitle>待核查</SectionTitle>{rows(groups.unknown, '')}</>}
+      {!!groups.unknown.length && <><SectionTitle>待确认</SectionTitle>{rows(groups.unknown, '')}</>}
     </>}
   </AppScreen>;
 }

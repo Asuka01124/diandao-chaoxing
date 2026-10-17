@@ -22,7 +22,7 @@ export default function JobScreen() {
   const notify = useFeedback();
   useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   useEffect(() => { if (qrPayload && scannedAt && id) {
-    notify('正在核查新二维码…', 'loading');
+    notify('正在检查新二维码…', 'loading');
     void replaceQrAndResume(store, id, qrPayload, scannedAt).then(() => notify('二维码已更新，请查看账号结果', 'success')).catch(e => { const message = e instanceof Error ? e.message : '更新二维码失败'; setError(message); notify(message, 'error'); });
   } }, [qrPayload, scannedAt]);
   if (!data) return null; const job = data.jobs.find(j => j.id === id); if (!job) return null;
@@ -36,7 +36,7 @@ export default function JobScreen() {
       else if (attempt?.state === 'FAILED' || attempt?.state === 'REAUTH_REQUIRED') notify(attempt.message || '该账号仍未完成，请查看结果', 'error');
       else if (attempt?.state?.startsWith('WAITING_')) notify('还需要完成验证，请查看账号状态', 'info');
       else if (accountId) notify('账号状态已更新，请查看结果', 'info');
-      else notify('执行结束，请查看逐账号结果', 'info');
+      else notify('处理完成，请查看各账号结果', 'info');
     } catch (e) { const message = e instanceof Error ? e.message : '操作失败，请重试'; setError(message); notify(message, 'error'); }
     finally { actionRunning.current = false; setActiveAction(null); }
   }
@@ -72,32 +72,32 @@ export default function JobScreen() {
   const result = jobResult(job, attempts);
   return <AppScreen title="任务结果" subtitle={job.activity.title}>
     {!!error && <FeedbackNotice message={error} tone="error" />}
-    <HeroCard eyebrow="执行状态" title={result.title} detail={result.detail} />
-    <SectionTitle>逐账号状态</SectionTitle><GroupedList>{attempts.map(attempt => {
+    <HeroCard eyebrow="签到进度" title={result.title} detail={result.detail} />
+    <SectionTitle>各账号结果</SectionTitle><GroupedList>{attempts.map(attempt => {
       const account = data.accounts.find(a => a.id === attempt.accountId);
       return <YStack key={attempt.accountId}><SettingsRow title={account?.label ?? '已删除账号'} detail={`${attempt.message ?? ''}${attempt.count ? ` · 提交 ${attempt.count} 次` : ''}`} accessory={<StatusBadge state={attempt.state} />} />
-        {(attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED') && <YStack padding={12}>{actionButton(`retry-${attempt.accountId}`, '核查后重试', '正在核查并重试…', () => retryAttempt(store, id, attempt.accountId), attempt.accountId)}</YStack>}
+        {(attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED') && <YStack padding={12}>{actionButton(`retry-${attempt.accountId}`, '检查并重试', '正在检查并重试…', () => retryAttempt(store, id, attempt.accountId), attempt.accountId)}</YStack>}
         {attempt.state === 'FAILED' && job.input.kind === 'photo' && <YStack padding={12} gap={8}>
-          {!!data.settings.reservedPhotos.length && <PrimaryButton disabled={!!activeAction} onPress={() => setReservedPickerAccountId(current => current === attempt.accountId ? null : attempt.accountId)}>{reservedPickerAccountId === attempt.accountId ? '收起预留照片' : '选择预留照片并重试'}</PrimaryButton>}
+          {!!data.settings.reservedPhotos.length && <PrimaryButton disabled={!!activeAction} onPress={() => setReservedPickerAccountId(current => current === attempt.accountId ? null : attempt.accountId)}>{reservedPickerAccountId === attempt.accountId ? '收起预留照片' : '用预留照片重试'}</PrimaryButton>}
           {reservedPickerAccountId === attempt.accountId && <GroupedList>{data.settings.reservedPhotos.map((photo, index) =>
             <ReservedPhotoRow key={photo.id} photo={photo} index={index} last={index === data.settings.reservedPhotos.length - 1}
-              detail="轻点后为该账号重试" onSelect={() => {
+              detail="点击使用这张照片重试" onSelect={() => {
                 if (!reservedPhotoExists(photo.id)) { notify('这张预留照片已丢失，请在设置中删除后重新添加', 'error'); return; }
                 setReservedPickerAccountId(null);
                 void runAction(`photo-reserved-${attempt.accountId}`, '正在处理预留照片…', () => retryWithPhoto(attempt.accountId, reservedPhotoUri(photo.id)), attempt.accountId);
               }} />)}</GroupedList>}
-          {actionButton(`photo-camera-${attempt.accountId}`, '拍摄新照片并重试', '正在处理照片…', () => providePhoto(attempt.accountId, true), attempt.accountId)}
-          {actionButton(`photo-library-${attempt.accountId}`, '选择新照片并重试', '正在处理照片…', () => providePhoto(attempt.accountId, false), attempt.accountId)}
+          {actionButton(`photo-camera-${attempt.accountId}`, '拍照重试', '正在处理照片…', () => providePhoto(attempt.accountId, true), attempt.accountId)}
+          {actionButton(`photo-library-${attempt.accountId}`, '从相册选照片重试', '正在处理照片…', () => providePhoto(attempt.accountId, false), attempt.accountId)}
         </YStack>}
-        {(attempt.state === 'WAITING_CAPTCHA' || attempt.state === 'WAITING_FACE') && <YStack padding={12}>{actionButton(`challenge-${attempt.accountId}`, '已在官方客户端验证，核查结果', '正在核查验证结果…', () => checkChallenge(store, id, attempt.accountId), attempt.accountId)}</YStack>}
+        {(attempt.state === 'WAITING_CAPTCHA' || attempt.state === 'WAITING_FACE') && <YStack padding={12}>{actionButton(`challenge-${attempt.accountId}`, '已在学习通验证，检查结果', '正在检查验证结果…', () => checkChallenge(store, id, attempt.accountId), attempt.accountId)}</YStack>}
         {attempt.state === 'WAITING_FACE' && <YStack padding={12} gap={8}>
-          {actionButton(`face-camera-${attempt.accountId}`, '拍摄该账号人脸照片', '正在上传并核查照片…', () => provideFace(attempt.accountId, true), attempt.accountId)}
-          {actionButton(`face-library-${attempt.accountId}`, '选择该账号授权照片', '正在上传并核查照片…', () => provideFace(attempt.accountId, false), attempt.accountId)}
+          {actionButton(`face-camera-${attempt.accountId}`, '拍摄本人脸部照片', '正在上传并验证照片…', () => provideFace(attempt.accountId, true), attempt.accountId)}
+          {actionButton(`face-library-${attempt.accountId}`, '选择本人授权的脸部照片', '正在上传并验证照片…', () => provideFace(attempt.accountId, false), attempt.accountId)}
         </YStack>}
       </YStack>;
     })}</GroupedList>
-    {attempts.some(a => a.state === 'WAITING_QR') && <YStack marginTop={20}><PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: job.activity.id, jobId: job.id } })}>扫描新二维码并继续</PrimaryButton></YStack>}
-    {attempts.some(a => a.state === 'WAITING_CAPTCHA' || a.state === 'WAITING_FACE') && <Message>第三方要求人工验证。可以在此提供该账号授权的人脸照片，或在官方客户端完成验证后核查状态。</Message>}
-    {job.state === 'RUNNING' && <YStack marginTop={20}>{actionButton('continue', '继续未完成账号', '正在继续执行任务…', () => runJob(store, job.id))}</YStack>}
+    {attempts.some(a => a.state === 'WAITING_QR') && <YStack marginTop={20}><PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: job.activity.id, jobId: job.id } })}>重新扫码并继续</PrimaryButton></YStack>}
+    {attempts.some(a => a.state === 'WAITING_CAPTCHA' || a.state === 'WAITING_FACE') && <Message>验证码请在学习通中完成；人脸验证可上传该账号本人的授权照片，也可在学习通中完成。完成后点击“检查结果”。</Message>}
+    {job.state === 'RUNNING' && <YStack marginTop={20}>{actionButton('continue', '继续签到', '正在继续签到…', () => runJob(store, job.id))}</YStack>}
   </AppScreen>;
 }

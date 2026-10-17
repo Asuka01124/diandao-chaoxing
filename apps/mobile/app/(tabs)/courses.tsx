@@ -54,7 +54,7 @@ export default function CoursesScreen() {
 
   async function loadCourses(current: Account, manual = false) {
     const request = ++sequence.current;
-    setBusy(true); setStatus({ tone: 'loading', message: manual ? '正在同步最新课程…' : '正在读取课程…' });
+    setBusy(true); setStatus({ tone: 'loading', message: manual ? '正在刷新课程…' : '正在加载课程…' });
     try {
       const session = await api.check(current.session);
       await store.update(v => { const item = v.accounts.find(a => a.id === current.id); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } });
@@ -108,7 +108,7 @@ export default function CoursesScreen() {
       if (request !== sequence.current) return;
       setNow(Date.now());
       setStatus(failures ? { tone: 'info', message: `${failures} 门课程未能检查签到活动，请刷新重试` } : null);
-    } catch (e) { if (request === sequence.current) setStatus({ tone: 'error', message: `课程读取失败：${e instanceof Error ? e.message : '请稍后重试'}` }); }
+    } catch (e) { if (request === sequence.current) setStatus({ tone: 'error', message: `加载课程失败：${e instanceof Error ? e.message : '请稍后重试'}` }); }
     finally { if (request === sequence.current) setBusy(false); }
   }
 
@@ -125,7 +125,7 @@ export default function CoursesScreen() {
         {pair.length === 1 && <YStack flex={1} />}
       </XStack>;
     })}</YStack>;
-  return <AppScreen title="我的课程" subtitle="选择一门课程，继续查看签到活动">
+  return <AppScreen title="我的课程" subtitle="选择课程，查看签到">
     <XStack alignItems="center" justifyContent="space-between">
       <XStack backgroundColor="$panel" borderRadius={18} padding={5} gap={5} shadowColor="#000000" shadowOpacity={0.05} shadowRadius={13} shadowOffset={{ width: 0, height: 4 }} elevation={2}>
         {(['list', 'grid'] as const).map(option => <Pressable key={option} accessibilityRole="button" accessibilityLabel={option === 'list' ? '列表显示课程' : '网格显示课程'} accessibilityState={{ selected: layout === option }}

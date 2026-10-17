@@ -39,7 +39,7 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
     setPoint(initial ? { latitude: initial.latitude, longitude: initial.longitude } : null);
     setCameraTarget(initial ? { latitude: initial.latitude, longitude: initial.longitude } : DEFAULT_CENTER);
     setAddress(initial?.address ?? '');
-    setMessage(initial ? '当前保存的位置，点按地图可重新选点' : '正在获取当前位置…');
+    setMessage(initial ? '当前为已保存的位置，点击地图可更换' : '正在获取当前位置…');
     setMessageTone(initial ? 'info' : 'loading');
     setLocating(!initial);
     if (configured) {
@@ -60,7 +60,7 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
       const result = await reGeocode({ location: next });
       if (request.current !== id || session.current !== opened) return;
       setAddress(result.pois[0]?.name || result.formattedAddress || '');
-      setMessage('已选中位置，确认名称后即可使用'); setMessageTone('success');
+      setMessage('已选好位置，请确认名称'); setMessageTone('success');
     } catch {
       if (request.current === id && session.current === opened) { setMessage('地址查询失败，请填写位置名称'); setMessageTone('error'); }
     }
@@ -71,7 +71,7 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
     try {
       const permission = await ExpoGaodeMapModule.requestLocationPermission();
       if (session.current !== opened) return;
-      if (!permission.granted) throw new Error('未获得定位权限，可直接在地图上选点；自动定位需在系统设置中开启权限');
+      if (!permission.granted) throw new Error('未开启定位权限，请在地图上选点，或在系统设置中允许定位');
       const current = await getLocationWithTimeout();
       if (session.current !== opened) return;
       const next = { latitude: current.latitude, longitude: current.longitude };
@@ -105,10 +105,10 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
       </XStack>
       {!configured ? <YStack flex={1} justifyContent="center" padding={24} gap={10}>
         <Text color="$color" fontSize={18} fontWeight="600">地图暂不可用</Text>
-        <Text color="$muted">高德地图尚未配置，请稍后更新应用。</Text>
+        <Text color="$muted">当前版本无法使用地图，请更新应用后重试。</Text>
       </YStack> : !privacyReady ? <YStack flex={1} justifyContent="center" padding={24} gap={16}>
         <Text color="$color" fontSize={20} fontWeight="700">首次使用高德地图</Text>
-        <Text color="$muted" fontSize={15} lineHeight={23}>地图由高德开放平台提供，会处理位置和设备信息以显示地图、定位和查询附近地址。首次使用需同意其隐私政策；之后新增位置时会直接请求系统定位权限并自动定位。</Text>
+        <Text color="$muted" fontSize={15} lineHeight={23}>高德地图会处理位置和设备信息，用于显示地图、定位和查询地址。请阅读并同意隐私政策；添加位置时会申请定位权限并自动定位。</Text>
         <Text color="$brand" fontSize={14} onPress={() => { void Linking.openURL('https://lbs.amap.com/pages/privacy/'); }}>查看高德地图隐私权政策 ›</Text>
         <PrimaryButton onPress={acceptPrivacy}>同意并继续</PrimaryButton>
       </YStack> : locating ? <YStack flex={1} justifyContent="center" alignItems="center" gap={14}>

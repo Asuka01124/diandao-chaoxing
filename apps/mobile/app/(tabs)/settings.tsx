@@ -131,7 +131,7 @@ export default function SettingsScreen() {
       } catch (error) { try { clearReservedPhoto(photo.id); } catch {} throw error; }
       notify('照片已添加，可以设置名称', 'success');
       setTimeout(() => editPhotoName(photo.id), 250);
-    } catch (e) { notify(e instanceof Error ? e.message : '预留照片失败', 'error'); }
+    } catch (e) { notify(e instanceof Error ? e.message : '添加照片失败', 'error'); }
     finally { setSavingPhoto(null); }
   }
   async function replaceReservedPhoto(id: string, source: 'camera' | 'album') {
@@ -188,13 +188,13 @@ export default function SettingsScreen() {
     <GroupedList>{data.settings.reservedPhotos.length ? data.settings.reservedPhotos.map((photo, index) =>
       <ReservedPhotoRow key={photo.id} photo={photo} index={index} last={index === data.settings.reservedPhotos.length - 1}
         detail="轻点更换，长按管理" onSelect={() => setPhotoReplaceId(photo.id)} onLongPress={() => setPhotoMenuId(photo.id)} />)
-      : <EmptyState title="暂无预留照片" detail="提前保存照片，拍照签到时可以直接选用" />}</GroupedList>
+      : <EmptyState title="暂无预留照片" detail="先添加照片，签到时可直接使用" />}</GroupedList>
     <XStack marginTop={12} gap={10}>
-      <YStack flex={1}><PrimaryButton disabled={data.settings.reservedPhotos.length >= 10 || !!savingPhoto} loading={savingPhoto === 'album'} onPress={() => { void addReservedPhoto('album'); }}>相册添加</PrimaryButton></YStack>
-      <YStack flex={1}><PrimaryButton disabled={data.settings.reservedPhotos.length >= 10 || !!savingPhoto} loading={savingPhoto === 'camera'} onPress={() => { void addReservedPhoto('camera'); }}>拍摄预留</PrimaryButton></YStack>
+      <YStack flex={1}><PrimaryButton disabled={data.settings.reservedPhotos.length >= 10 || !!savingPhoto} loading={savingPhoto === 'album'} onPress={() => { void addReservedPhoto('album'); }}>从相册选择</PrimaryButton></YStack>
+      <YStack flex={1}><PrimaryButton disabled={data.settings.reservedPhotos.length >= 10 || !!savingPhoto} loading={savingPhoto === 'camera'} onPress={() => { void addReservedPhoto('camera'); }}>拍照添加</PrimaryButton></YStack>
     </XStack>
-    <Text color="$muted" fontSize={12} lineHeight={18} marginTop={8}>预留照片保存在本机，直到你删除。</Text>
-    {data.settings.reservedPhotos.length >= 10 && <Text color="$muted" fontSize={12} lineHeight={18}>已达到 10 张上限，删除一张后可继续添加。</Text>}
+    <Text color="$muted" fontSize={12} lineHeight={18} marginTop={8}>照片保存在本机，可随时删除。</Text>
+    {data.settings.reservedPhotos.length >= 10 && <Text color="$muted" fontSize={12} lineHeight={18}>已存满 10 张，删除后可继续添加。</Text>}
     <AboutAppSection />
     <MapPicker visible={mapOpen} initial={editingIndex === null ? null : data.settings.favoriteLocations[editingIndex] ?? null} onClose={() => { setMapOpen(false); setEditingIndex(null); }} onPick={(location: LocationInput) => {
       const index = editingIndex;

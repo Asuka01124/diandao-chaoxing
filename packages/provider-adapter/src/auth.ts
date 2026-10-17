@@ -85,7 +85,7 @@ async function loginWithEncrypted(
   if (!jar.exportCookies().length)
     throw new ProviderError(
       "REAUTH_REQUIRED",
-      "未收到学习通登录会话，请检查网络后重试",
+      "未能完成登录，请检查网络后重试",
     );
   const user = await identity(jar);
   return {
@@ -116,7 +116,7 @@ export async function checkSession(
   try {
     const user = await identity(jar);
     if (user.userId !== session.userId)
-      throw new ProviderError("REAUTH_REQUIRED", "会话身份不匹配");
+      throw new ProviderError("REAUTH_REQUIRED", "登录账号身份不匹配，请重新登录");
     return { ...session, ...user, cookies: jar.exportCookies() };
   } catch (error) {
     if (
@@ -132,7 +132,7 @@ export async function checkSession(
       new RequestSession(undefined, transport),
     );
     if (renewed.userId !== session.userId)
-      throw new ProviderError("REAUTH_REQUIRED", "重登后身份不匹配");
+      throw new ProviderError("REAUTH_REQUIRED", "重新登录后账号身份不匹配，请核对账号");
     return renewed;
   }
 }

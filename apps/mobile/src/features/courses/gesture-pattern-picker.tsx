@@ -18,7 +18,7 @@ export function GesturePatternPicker({ value, onChange }: { value: string; onCha
   }).join(' ');
 
   return <YStack gap={14}>
-    <Text color="$muted" fontSize={14} lineHeight={22}>照着老师给出的手势，按顺序点选圆点，至少选择 4 个。</Text>
+    <Text color="$muted" fontSize={14} lineHeight={22}>按老师给出的顺序，点击至少 4 个不同的圆点。</Text>
     <View style={{ width: SIZE, height: SIZE, alignSelf: 'center', borderWidth: 1, borderColor: theme.fieldBorder.val, backgroundColor: theme.panel.val, borderRadius: 24 }}>
       <Svg width={SIZE} height={SIZE} style={{ position: 'absolute', left: 0, top: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Path d={line} fill="none" stroke={theme.brand.val} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
@@ -43,7 +43,7 @@ export function GesturePatternPicker({ value, onChange }: { value: string; onCha
       })}
     </View>
     <Text color={value.length >= 4 ? '$color' : '$muted'} fontSize={13} textAlign="center">
-      {value.length ? `已选 ${value.length} 个圆点${value.length < 4 ? '，还需至少 4 个' : '，可以开始签到'}` : '尚未选择手势'}
+      {value.length ? `已选 ${value.length} 个圆点${value.length < 4 ? `，还需 ${4 - value.length} 个` : '，可以开始签到'}` : '请先选择手势'}
     </Text>
     <XStack gap={10}>
       <Pressable accessibilityRole="button" accessibilityLabel="撤销上一步" accessibilityState={{ disabled: !value }} disabled={!value}

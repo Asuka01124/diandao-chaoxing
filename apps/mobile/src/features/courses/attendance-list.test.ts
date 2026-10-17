@@ -21,5 +21,5 @@ test('按个人签到结果分组，已结束的未签到活动仍归入未签�
 test('未签到和未知状态没有成功勾号，签到结果与活动时间分开展示', () => {
   expect(attendanceRow(activity('fifth', false, { status: 2 }))).toEqual({ detail: '未签到 · 已结束', symbol: '–' });
   expect(attendanceRow(activity('fourth', true))).toEqual({ detail: '已签到 · 进行中', symbol: '✓' });
-  expect(attendanceRow(activity('third', null))).toEqual({ detail: '待核查 · 进行中', symbol: '?' });
+  expect(attendanceRow(activity('third', null))).toEqual({ detail: '待确认 · 进行中', symbol: '?' });
 });

@@ -105,7 +105,7 @@ test("登录响应缺少会话 Cookie 时明确提示", async () => {
     ),
   ).rejects.toMatchObject({
     code: "REAUTH_REQUIRED",
-    message: "未收到学习通登录会话，请检查网络后重试",
+    message: "未能完成登录，请检查网络后重试",
   });
 });
 

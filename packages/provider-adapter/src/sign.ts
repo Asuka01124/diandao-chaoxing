@@ -44,7 +44,7 @@ function attendanceRecord(page: string): Record<string, unknown> | undefined {
 
 export function parseStatusPage(page: string): SignStatus {
   if (/passport2\.chaoxing\.com/i.test(page) && /<input\b[^>]*\btype\s*=\s*["']?password/i.test(page)) {
-    throw new ProviderError('SESSION_EXPIRED', '学习通登录已过期，请重新授权');
+    throw new ProviderError('SESSION_EXPIRED', '学习通登录已过期，请重新登录');
   }
   if (page.includes('校验失败，未查询到活动数据')) {
     throw new ProviderError('NOT_MEMBER', '该账号不在活动班级');
@@ -84,7 +84,7 @@ async function requestStatusPage(
     body: new URLSearchParams({ ext: activity.ext }),
   });
   if (response.url && new URL(response.url).hostname === 'passport2.chaoxing.com') {
-    throw new ProviderError('SESSION_EXPIRED', '学习通登录已过期，请重新授权');
+    throw new ProviderError('SESSION_EXPIRED', '学习通登录已过期，请重新登录');
   }
   return response.text();
 }

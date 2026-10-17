@@ -67,7 +67,7 @@ export function AboutAppSection() {
     if (release) { setDownloadError(''); setDialogOpen(true); return; }
     const controller = new AbortController();
     pending.current = controller;
-    setChecking(true); setFailed(false); setMessage('正在获取最新版本…');
+    setChecking(true); setFailed(false); setMessage('正在检查更新…');
     try {
       const result = await checkCachedUpdates(current, controller.signal);
       if (!mounted.current || controller.signal.aborted) return;
@@ -101,8 +101,8 @@ export function AboutAppSection() {
     <SectionTitle>关于到点</SectionTitle>
     <GroupedList>
       <AboutRow kind="update" title="版本更新" detail={`当前版本 v${current.version}`} busy={checking}
-        action={Platform.OS === 'ios' ? '版本发布' : release ? '发现更新' : failed ? '重试' : '检查更新'} onPress={() => { void check(); }} />
-      <AboutRow kind="repo" title="GitHub 仓库" detail="Asuka01124/diandao-chaoxing" last onPress={() => { void openLink(repositoryUrl); }} />
+        action={Platform.OS === 'ios' ? '查看版本' : release ? '发现更新' : failed ? '重试' : '检查更新'} onPress={() => { void check(); }} />
+      <AboutRow kind="repo" title="项目主页" detail="Asuka01124/diandao-chaoxing" last onPress={() => { void openLink(repositoryUrl); }} />
     </GroupedList>
     <Text color={failed ? '$danger' : '$muted'} fontSize={12} lineHeight={19} marginTop={9} marginLeft={3} minHeight={19} accessibilityLiveRegion="polite">{message}</Text>
     <Modal visible={dialogOpen} transparent animationType="none" onRequestClose={() => setDialogOpen(false)}>

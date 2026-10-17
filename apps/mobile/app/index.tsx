@@ -44,14 +44,14 @@ export default function LoginScreen() {
     catch (e) { const message = e instanceof Error ? e.message : '登录失败'; setError(message); notify(message, 'error'); }
     finally { setBusy(false); }
   }
-  return <AppScreen title="欢迎回来" subtitle="登录学习通，查看你的课程与签到">
-    <HeroCard eyebrow="专注每一次签到" title="课程与任务，尽在掌握" detail="账号资料加密保存在这台设备，登录后即可开始。" />
+  return <AppScreen title="登录学习通" subtitle="查看课程，完成签到">
+    <HeroCard eyebrow="到点" title="用学习通账号登录" detail="账号资料加密保存在本机。" />
     <YStack backgroundColor="$panel" borderRadius="$radius.panel" padding={20} marginTop={22} gap={14}>
       <Text color="$muted" fontSize={12} fontWeight="600">学习通账号</Text>
       <GlassInput placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" />
       <Text color="$muted" fontSize={12} fontWeight="600">密码</Text>
       <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" />
-      <PrimaryButton loading={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录并进入课程'}</PrimaryButton>
+      <PrimaryButton loading={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录'}</PrimaryButton>
     </YStack>
     {!!error && <YStack marginTop={14}><FeedbackNotice message={error} tone="error" /></YStack>}
   </AppScreen>;
