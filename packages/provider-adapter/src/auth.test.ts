@@ -51,6 +51,42 @@ test("登录失败时显示学习通返回的原因", async () => {
   });
 });
 
+test("登录及身份查询的服务器异常只显示易懂提示", async () => {
+  const errorPage = '<html><h1>Apache Tomcat/7.0.37 - HTTP Status 500</h1>' +
+    '<p>java.lang.IllegalArgumentException: Model has no value for key &quot;result&quot; ' +
+    '服务异常，请重试[805001]</p></html>';
+  for (const failedStep of ['login', 'identity']) {
+    await expect(
+      login('13800000000', 'password123', 'device', async (url) => {
+        if (failedStep === 'identity' && url.includes('/fanyalogin')) {
+          return Response.json({ status: true }, { headers: { 'set-cookie': 'sid=abc; Path=/' } });
+        }
+        return new Response(errorPage, { status: 500 });
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNKNOWN',
+      message: '学习通暂时无法提供服务，请稍后再试',
+      retryable: true,
+    });
+  }
+});
+
+test("HTTP 登录错误根据原因给出操作提示，不展示响应原文", async () => {
+  const cases = [
+    [429, '操作太频繁了，请稍等一会儿再试', 'RATE_LIMITED', true],
+    [401, '学习通登录已过期，请重新登录', 'UNKNOWN', false],
+    [403, '学习通暂时不允许访问，请稍后再试', 'UNKNOWN', false],
+    [408, '连接学习通超时，请检查网络后重试', 'UNKNOWN', false],
+    [400, '学习通未能处理这次请求，请稍后再试', 'UNKNOWN', false],
+  ] as const;
+  for (const [status, message, code, retryable] of cases) {
+    await expect(
+      login('13800000000', 'password123', 'device', async () =>
+        new Response('<html>Exception report: internal error</html>', { status })),
+    ).rejects.toMatchObject({ code, message, retryable });
+  }
+});
+
 test("登录会话可继续读取课程", async () => {
   const session = await login(
     "13800000000",

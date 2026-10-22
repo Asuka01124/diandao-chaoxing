@@ -37,11 +37,10 @@ export default function LoginScreen() {
   if (hasPrimaryAccount(store.data)) return null;
 
   async function submit() {
-    if (!identifier.trim() || !password) { setError('请输入学习通账号和密码'); notify('请输入学习通账号和密码', 'error'); return; }
+    if (!identifier.trim() || !password) { setError('请输入学习通账号和密码'); return; }
     setBusy(true); setError('');
-    notify('正在登录学习通…', 'loading');
     try { await saveLogin(store, identifier, password, { role: 'primary' }); setPassword(''); notify('登录成功，正在进入课程', 'success'); router.replace('/(tabs)/courses'); }
-    catch (e) { const message = e instanceof Error ? e.message : '登录失败'; setError(message); notify(message, 'error'); }
+    catch (e) { setError(e instanceof Error ? e.message : '登录失败，请稍后再试'); }
     finally { setBusy(false); }
   }
   return <AppScreen title="登录学习通" subtitle="查看课程，完成签到">
@@ -51,8 +50,8 @@ export default function LoginScreen() {
       <GlassInput placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" />
       <Text color="$muted" fontSize={12} fontWeight="600">密码</Text>
       <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" />
+      {!!error && <FeedbackNotice message={error} tone="error" />}
       <PrimaryButton loading={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录'}</PrimaryButton>
     </YStack>
-    {!!error && <YStack marginTop={14}><FeedbackNotice message={error} tone="error" /></YStack>}
   </AppScreen>;
 }

@@ -1,7 +1,6 @@
 import type { ProviderSession } from "@sign/shared";
 import { getOperationSignal } from "./deadline";
 import { ProviderError } from "./errors";
-import { responseMessage } from './response';
 
 type Cookie = ProviderSession["cookies"][number];
 export type Transport = (url: string, init: RequestInit) => Promise<Response>;
@@ -135,10 +134,21 @@ export class RequestSession {
       );
     }
     if (!response.ok) {
-      const detail = responseMessage(await response.text());
+      // 错误响应可能是整页服务器异常，界面只展示可理解、可操作的提示。
+      const message = response.status >= 500
+        ? '学习通暂时无法提供服务，请稍后再试'
+        : response.status === 429
+          ? '操作太频繁了，请稍等一会儿再试'
+          : response.status === 401
+            ? '学习通登录已过期，请重新登录'
+            : response.status === 403
+              ? '学习通暂时不允许访问，请稍后再试'
+              : response.status === 408
+                ? '连接学习通超时，请检查网络后重试'
+                : '学习通未能处理这次请求，请稍后再试';
       throw new ProviderError(
         response.status === 429 ? "RATE_LIMITED" : "UNKNOWN",
-        `学习通 HTTP ${response.status}${detail ? `：${detail}` : ''}`,
+        message,
         response.status >= 500 || response.status === 429,
       );
     }
