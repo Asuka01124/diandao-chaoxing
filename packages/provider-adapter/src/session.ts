@@ -1,6 +1,7 @@
 import type { ProviderSession } from "@sign/shared";
 import { getOperationSignal } from "./deadline";
 import { ProviderError } from "./errors";
+import { userResponseMessage } from './response';
 
 type Cookie = ProviderSession["cookies"][number];
 export type Transport = (url: string, init: RequestInit) => Promise<Response>;
@@ -135,7 +136,7 @@ export class RequestSession {
     }
     if (!response.ok) {
       // 错误响应可能是整页服务器异常，界面只展示可理解、可操作的提示。
-      const message = response.status >= 500
+      let message = response.status >= 500
         ? '学习通暂时无法提供服务，请稍后再试'
         : response.status === 429
           ? '操作太频繁了，请稍等一会儿再试'
@@ -146,6 +147,10 @@ export class RequestSession {
               : response.status === 408
                 ? '连接学习通超时，请检查网络后重试'
                 : '学习通未能处理这次请求，请稍后再试';
+      if (response.status < 500 && ![401, 408, 429].includes(response.status)) {
+        const detail = userResponseMessage(await response.text());
+        if (detail) message = detail;
+      }
       throw new ProviderError(
         response.status === 429 ? "RATE_LIMITED" : "UNKNOWN",
         message,

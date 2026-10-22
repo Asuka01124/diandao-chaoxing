@@ -87,6 +87,19 @@ test("HTTP 登录错误根据原因给出操作提示，不展示响应原文", 
   }
 });
 
+test("客户端错误保留简短中文原因，过滤混入的服务器异常", async () => {
+  for (const [body, message] of [
+    [JSON.stringify({ msg: '当前账号没有签到权限' }), '当前账号没有签到权限'],
+    ['当前账号没有签到权限', '当前账号没有签到权限'],
+    [JSON.stringify({ msg: 'java.lang.IllegalArgumentException: 服务异常' }), '学习通暂时不允许访问，请稍后再试'],
+    [JSON.stringify({ msg: '<html>服务异常</html>' }), '学习通暂时不允许访问，请稍后再试'],
+    [JSON.stringify({ msg: '服务异常 &quot;result&quot;' }), '学习通暂时不允许访问，请稍后再试'],
+  ]) {
+    await expect(login('13800000000', 'password123', 'device', async () =>
+      new Response(body, { status: 403 }))).rejects.toMatchObject({ message });
+  }
+});
+
 test("登录会话可继续读取课程", async () => {
   const session = await login(
     "13800000000",

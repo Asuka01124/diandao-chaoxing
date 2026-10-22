@@ -17,6 +17,20 @@ export function str(v: unknown, field: string): string {
 }
 export function stamp(v: unknown): number | null { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; }
 
+// 只接受简短的中文业务说明；HTML、异常堆栈和原始 JSON 使用通用提示。
+export function userResponseMessage(body: string): string {
+  let detail: unknown = body;
+  try {
+    const data = JSON.parse(body);
+    detail = data?.errorMsg || data?.msg || data?.message;
+  } catch {}
+  if (typeof detail !== 'string') return '';
+  const message = detail.trim();
+  if (!message || message.length > 120 || !/[\u3400-\u9fff]/.test(message) ||
+      /[<>\[\]{}\u0000-\u001f]|&(?:#\d+|#x[\da-f]+|[a-z]+);|exception|\b(?:java|javax|org|com)\.|\b(?:HTTP|Tomcat|stacktrace)\b/i.test(message)) return '';
+  return message;
+}
+
 export function responseMessage(body: string): string {
   let message = body;
   try {
