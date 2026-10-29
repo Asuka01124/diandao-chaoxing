@@ -18,7 +18,8 @@ import { AppScreen, FeedbackNotice, GlassInput, GroupedList, HeroCard, Message, 
 export default function PrepareScreen() {
   const { id, accountId, selectedIds, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; accountId?: string; selectedIds?: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
   const activity = data?.activityCache.find(a => a.id === id && a.cacheAccountId === accountId);
-  const [selected, setSelected] = useState<string[]>(() => selectedIds ? selectedIds.split(',').filter(Boolean) : []);
+  const [selectedAccountIds, setSelected] = useState<string[] | null>(() => selectedIds !== undefined ? selectedIds.split(',').filter(Boolean) : null);
+  const selected = selectedAccountIds ?? data?.accounts.map(account => account.id) ?? [];
   const [location, setLocation] = useState<LocationInput | null>(null); const [mapOpen, setMapOpen] = useState(false);
   const [code, setCode] = useState(''); const [gesture, setGesture] = useState(''); const [qr, setQr] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export default function PrepareScreen() {
     <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>{`为 ${selected.length} 个账号签到`}</PrimaryButton>
   </YStack>}>
     <HeroCard eyebrow="签到准备" title={`已选 ${selected.length} 个账号`} detail="选择账号，并按要求填写签到信息。" />
-    <SectionTitle>选择账号</SectionTitle><GroupedList>{data.accounts.map(a => <SettingsRow key={a.id} title={a.label} detail={a.role === 'primary' ? '我的账号' : undefined} onPress={() => { setError(''); setSelected(ids => ids.includes(a.id) ? ids.filter(id => id !== a.id) : [...ids, a.id]); }} accessory={<Text color="$brand" fontSize={20}>{selected.includes(a.id) ? '✓' : '○'}</Text>} />)}</GroupedList>
+    <SectionTitle>选择账号</SectionTitle><GroupedList>{data.accounts.map(a => <SettingsRow key={a.id} title={a.label} detail={a.role === 'primary' ? '我的账号' : undefined} onPress={() => { setError(''); setSelected(selected.includes(a.id) ? selected.filter(id => id !== a.id) : [...selected, a.id]); }} accessory={<Text color="$brand" fontSize={20}>{selected.includes(a.id) ? '✓' : '○'}</Text>} />)}</GroupedList>
     {needsLocation && <><SectionTitle>签到位置</SectionTitle><GroupedList><SettingsRow title={location?.address ?? '尚未选择位置'} detail={location ? '点击更换位置' : '点击地图选择签到位置'} symbol="⌖" onPress={() => setMapOpen(true)} /></GroupedList></>}
     {needsLocation && !!data.settings.favoriteLocations.length && <><SectionTitle>常用位置</SectionTitle><GroupedList>{data.settings.favoriteLocations.map((item, index) => <SettingsRow key={index} title={item.address} detail="点击使用此位置" selected={location?.latitude === item.latitude && location?.longitude === item.longitude} onPress={() => { setLocation(item); setError(''); notify('已选用常用位置', 'success'); }} />)}</GroupedList></>}
     <MapPicker visible={mapOpen} initial={location} onClose={() => setMapOpen(false)} onPick={point => { setLocation(point); setError(''); notify('签到位置已选择', 'success'); }} />
