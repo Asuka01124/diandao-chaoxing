@@ -1,11 +1,24 @@
 import type { AttemptState } from '@sign/shared';
 import { Text, YStack } from 'tamagui';
 
-const labels: Record<AttemptState, string> = { QUEUED: '排队中', PREFLIGHT: '检查中', SUBMITTING: '提交中', VERIFYING: '确认结果中', SUCCESS: '成功', ALREADY_SIGNED: '已签到', WAITING_QR: '等待新二维码', WAITING_CAPTCHA: '等待验证码', WAITING_FACE: '等待人脸验证', REAUTH_REQUIRED: '需重新登录', EXPIRED: '已结束', FAILED: '失败' };
+const labels: Record<AttemptState, string> = {
+  QUEUED: '排队中', PREFLIGHT: '检查中', SUBMITTING: '提交中', VERIFYING: '确认中',
+  SUCCESS: '已签到', ALREADY_SIGNED: '已签到', WAITING_QR: '待新码',
+  WAITING_CAPTCHA: '待验证码', WAITING_FACE: '待人脸', REAUTH_REQUIRED: '需重登',
+  EXPIRED: '已结束', FAILED: '失败',
+};
+
 export function StatusBadge({ state }: { state: AttemptState }) {
-  const tone = state === 'SUCCESS' || state === 'ALREADY_SIGNED' ? '$success' : state === 'FAILED' || state === 'REAUTH_REQUIRED' ? '$danger' : '$brand';
-  return <YStack backgroundColor="$soft" borderRadius={10} paddingHorizontal={9} paddingVertical={5}>
-    <Text fontSize={11} fontWeight="700" color={tone}>{labels[state]}</Text>
+  const isOk = state === 'SUCCESS' || state === 'ALREADY_SIGNED';
+  const isWarn = state === 'FAILED' || state === 'REAUTH_REQUIRED' || state.startsWith('WAITING_');
+  const tone = isOk ? '$success' : isWarn ? '$danger' : '$muted';
+  return <YStack backgroundColor={isWarn && !isOk ? '$dangerSoft' : '$soft'} borderRadius={8} paddingHorizontal={10} paddingVertical={4}>
+    <Text fontSize={12} fontWeight="500" color={tone}>{labels[state]}</Text>
   </YStack>;
 }
-export function AccountAvatar({ name }: { name: string }) { return <YStack width={42} height={42} borderRadius={15} backgroundColor="$soft" alignItems="center" justifyContent="center"><Text color="$brand" fontSize={17} fontWeight="700">{name.slice(0, 1).toUpperCase()}</Text></YStack>; }
+
+export function AccountAvatar({ name }: { name: string }) {
+  return <YStack width={38} height={38} borderRadius={12} backgroundColor="$soft" alignItems="center" justifyContent="center">
+    <Text color="$color" fontSize={14} fontWeight="500">{name.slice(0, 1).toUpperCase()}</Text>
+  </YStack>;
+}
