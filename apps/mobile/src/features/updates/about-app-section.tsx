@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import { ActivityIndicator, Linking, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { Button, Text, XStack, YStack, useTheme } from 'tamagui';
 import appConfig from '../../../app.json';
@@ -31,7 +30,6 @@ function AboutRow({ kind, indexLabel, title, detail, action, busy, last, onPress
 
 export function AboutAppSection() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const current = {
     version: Constants.expoConfig?.version ?? appConfig.expo.version,
@@ -97,10 +95,10 @@ export function AboutAppSection() {
     </GroupedList>
     <Text color={failed ? '$danger' : '$muted'} fontSize={12} lineHeight={18} marginTop={8} marginLeft={4} minHeight={18} accessibilityLiveRegion="polite">{message}</Text>
     <Modal visible={dialogOpen} transparent animationType="none" onRequestClose={() => setDialogOpen(false)}>
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
         <Pressable onPress={() => setDialogOpen(false)} accessibilityLabel="关闭版本更新" style={{ position: 'absolute', inset: 0, backgroundColor: theme.overlay.val }} />
-        <YStack width="100%" maxWidth={680} alignSelf="center" backgroundColor="$panel" borderTopLeftRadius={24} borderTopRightRadius={24}
-          paddingHorizontal={22} paddingTop={22} paddingBottom={Math.max(insets.bottom, 20)} maxHeight={height * 0.85} gap={14} accessibilityViewIsModal>
+        <YStack width="100%" maxWidth={340} alignSelf="center" backgroundColor="$panel" borderRadius={24}
+          padding={22} maxHeight={height * 0.85} gap={14} accessibilityViewIsModal>
           <ScrollView style={{ flexShrink: 1, maxHeight: Math.max(96, height * 0.55) }}>
             <Text color="$color" fontSize={22} lineHeight={30} fontWeight="500" accessibilityRole="header" marginBottom={6}>发现新版本</Text>
             <Text color="$muted" fontSize={13} lineHeight={20} marginBottom={18}>v{current.version} → {release?.tag}</Text>

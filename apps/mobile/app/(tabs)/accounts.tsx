@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Text, XStack, YStack, useTheme } from 'tamagui';
 import type { Account } from '@sign/shared';
@@ -77,9 +77,11 @@ export default function AccountsScreen() {
     }) : <EmptyState title="暂无代签账号" detail="点击右上角「+ 添加」录入同学账号" />}</GroupedList>
 
     <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={closeSheet}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
         <Pressable onPress={closeSheet} accessibilityLabel="关闭添加账号窗口" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: theme.overlay.val }} />
-        <YStack backgroundColor="$panel" borderTopLeftRadius={24} borderTopRightRadius={24} padding={22} paddingBottom={32} gap={12}>
+        <ScrollView keyboardShouldPersistTaps="handled"
+          style={{ width: '100%', maxWidth: 340, alignSelf: 'center', flexGrow: 0, backgroundColor: theme.panel.val, borderRadius: 24 }}
+          contentContainerStyle={{ padding: 22, gap: 12 }}>
           <XStack alignItems="center" justifyContent="space-between" marginBottom={4}>
             <Text color="$color" fontSize={18} fontWeight="500">{reauthId ? '重新登录' : '添加代签账号'}</Text>
             <Pressable onPress={closeSheet} accessibilityRole="button" accessibilityLabel="取消"
@@ -91,7 +93,7 @@ export default function AccountsScreen() {
           <GlassInput placeholder="学习通账号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" accessibilityLabel="账号" />
           <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="密码" />
           <YStack marginTop={4}><PrimaryButton loading={busy} disabled={!!checkingId} onPress={() => { void add(); }}>{reauthId ? '重新登录' : '保存账号'}</PrimaryButton></YStack>
-        </YStack>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
 

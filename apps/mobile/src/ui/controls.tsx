@@ -49,9 +49,9 @@ export function ActionSheet({ visible, title, subtitle, actions, onClose }: {
   visible: boolean; title: string; subtitle?: string; actions: { label: string; onPress: () => void; danger?: boolean }[]; onClose: () => void;
 }) {
   const theme = useTheme();
-  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={{ flex: 1, justifyContent: 'flex-end' }}>
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
     <Pressable onPress={onClose} accessibilityLabel="关闭操作菜单" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: theme.overlay.val }} />
-    <YStack backgroundColor="$panel" overflow="hidden" padding={22} paddingBottom={34} borderTopLeftRadius={24} borderTopRightRadius={24} gap={10}>
+    <YStack width="100%" maxWidth={340} alignSelf="center" backgroundColor="$panel" overflow="hidden" padding={22} borderRadius={24} gap={10}>
       <YStack alignItems="center" marginBottom={6} gap={3}>
         <Text color="$color" fontSize={16} fontWeight="500" textAlign="center">{title}</Text>
         {!!subtitle && <Text color="$muted" fontSize={12} textAlign="center">{subtitle}</Text>}
