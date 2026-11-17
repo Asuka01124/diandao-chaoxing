@@ -1,10 +1,22 @@
 export const repositoryUrl = 'https://github.com/Asuka01124/diandao-chaoxing';
 export const latestReleaseUrl = `${repositoryUrl}/releases/latest`;
 export const releaseManifestUrl = `${latestReleaseUrl}/download/update.json`;
+export const cnbRepositoryUrl = 'https://cnb.cool/diandao-app/diandao-chaoxing';
+export const cnbReleaseManifestUrl = `${cnbRepositoryUrl}/-/git/raw/updates/update.json`;
+
+export type ReleaseSource = 'github' | 'cnb';
+const releaseSources = {
+  github: { manifest: releaseManifestUrl, releases: `${repositoryUrl}/releases` },
+  cnb: { manifest: cnbReleaseManifestUrl, releases: `${cnbRepositoryUrl}/-/releases` },
+};
+
+export function releaseApkUrl(source: ReleaseSource, tag: string, version: string) {
+  return `${releaseSources[source].releases}/download/${encodeURIComponent(tag)}/daodian-v${version}-arm64.apk`;
+}
 
 export type AppVersion = { version: string; versionCode: number };
 export type AppRelease = {
-  version: string; versionCode: number | null; tag: string; releaseUrl: string; apkUrl: string; notes: string;
+  version: string; versionCode: number | null; tag: string; releaseUrl: string; apkUrl: string; notes: string; source: ReleaseSource;
 };
 export type UpdateResult = { available: boolean; release: AppRelease };
 type UpdateResponse = { ok: boolean; status: number; headers?: Pick<Headers, 'get'>; json(): Promise<unknown> };
@@ -70,7 +82,7 @@ export function compareVersions(left: string, right: string): number {
   return 0;
 }
 
-export function parseRelease(value: unknown): AppRelease {
+export function parseRelease(value: unknown, source: ReleaseSource = 'github'): AppRelease {
   const data = record(value);
   if (data.draft !== false || data.prerelease !== false || typeof data.tag_name !== 'string') {
     throw new UpdateError('暂未找到正式版本，请到项目主页查看');
@@ -80,10 +92,10 @@ export function parseRelease(value: unknown): AppRelease {
   const version = match[1];
   versionParts(version);
   const tag = data.tag_name;
-  const releaseUrl = `${repositoryUrl}/releases/tag/${encodeURIComponent(tag)}`;
+  const releaseUrl = `${releaseSources[source].releases}/tag/${encodeURIComponent(tag)}`;
   if (data.html_url !== releaseUrl || !Array.isArray(data.assets)) throw new UpdateError('发布链接异常，请到项目主页查看');
   const apkName = `daodian-v${version}-arm64.apk`;
-  const apkUrl = `${repositoryUrl}/releases/download/${encodeURIComponent(tag)}/${apkName}`;
+  const apkUrl = releaseApkUrl(source, tag, version);
   const apk = data.assets.find(item => item && typeof item === 'object' && item.name === apkName);
   if (!apk || apk.browser_download_url !== apkUrl || (typeof apk.size !== 'number' || !Number.isSafeInteger(apk.size) || apk.size <= 0)) {
     throw new UpdateError('该版本暂无 Android 安装包，请稍后重试');
@@ -109,7 +121,7 @@ export function parseRelease(value: unknown): AppRelease {
   }
   const content = body.match(/(?:^|\n)## 更新内容\s*\n([\s\S]*?)(?=\n<!--|\n## |$)/)?.[1]?.trim();
   const notes = content?.replace(/^[-*]\s+/gm, '• ').slice(0, 2000) || '请到项目主页查看更新说明。';
-  return { version, versionCode, tag, releaseUrl, apkUrl, notes };
+  return { version, versionCode, tag, releaseUrl, apkUrl, notes, source };
 }
 
 export function evaluateUpdate(current: AppVersion, release: AppRelease): UpdateResult {
@@ -120,14 +132,14 @@ export function evaluateUpdate(current: AppVersion, release: AppRelease): Update
   throw new UpdateError('无法确认是否需要更新，请到项目主页查看');
 }
 
-async function fetchManifest(transport: Transport, signal?: AbortSignal): Promise<unknown> {
+async function fetchManifest(transport: Transport, source: ReleaseSource, signal?: AbortSignal): Promise<unknown> {
   if (signal?.aborted) throw new UpdateError('已取消检查更新');
   const controller = new AbortController();
   const cancel = () => controller.abort();
   signal?.addEventListener('abort', cancel, { once: true });
   const timeout = setTimeout(cancel, 15000);
   try {
-    const response = await transport(releaseManifestUrl, {
+    const response = await transport(releaseSources[source].manifest, {
       method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal,
       headers: { Accept: 'application/json' },
     });
@@ -136,7 +148,7 @@ async function fetchManifest(transport: Transport, signal?: AbortSignal): Promis
     let body: unknown;
     try { body = await response.json(); }
     catch { throw new UpdateError(controller.signal.aborted ? '检查更新超时，请稍后重试' : '无法读取更新信息，请到项目主页查看'); }
-    parseRelease(body);
+    parseRelease(body, source);
     return body;
   } catch (error) {
     if (error instanceof UpdateError) throw error;
@@ -148,7 +160,7 @@ async function fetchManifest(transport: Transport, signal?: AbortSignal): Promis
 }
 
 export async function checkForUpdates(current: AppVersion, transport: Transport = fetch, signal?: AbortSignal): Promise<UpdateResult> {
-  return evaluateUpdate(current, parseRelease(await fetchManifest(transport, signal)));
+  return evaluateUpdate(current, parseRelease(await fetchManifest(transport, 'github', signal)));
 }
 
 export const updateCacheTtl = 30 * 60 * 1000;
@@ -156,7 +168,7 @@ type UpdateCache = { checkedAt: number; manifest: unknown };
 export type UpdateCacheStorage = { read(): Promise<string | null>; write(value: string): Promise<void> };
 
 // 同一实例跨页面复用；每位调用者独立取消，最后一位退出时中止网络请求。
-export function createUpdateChecker(transport: Transport, storage: UpdateCacheStorage, now = Date.now) {
+export function createUpdateChecker(transport: Transport, storage: UpdateCacheStorage, now = Date.now, source: ReleaseSource = 'github') {
   let cache: UpdateCache | null = null;
   let loaded = false;
   let limited: UpdateError | null = null;
@@ -169,7 +181,7 @@ export function createUpdateChecker(transport: Transport, storage: UpdateCacheSt
         if (value) {
           const saved = record(JSON.parse(value));
           if (typeof saved.checkedAt === 'number' && Number.isFinite(saved.checkedAt)) {
-            parseRelease(saved.manifest);
+            parseRelease(saved.manifest, source);
             cache = { checkedAt: saved.checkedAt, manifest: saved.manifest };
           }
         }
@@ -177,12 +189,12 @@ export function createUpdateChecker(transport: Transport, storage: UpdateCacheSt
       loaded = true;
     }
     if (signal.aborted) throw new UpdateError('已取消检查更新');
-    if (cache && now() >= cache.checkedAt && now() - cache.checkedAt < updateCacheTtl) return parseRelease(cache.manifest);
+    if (cache && now() >= cache.checkedAt && now() - cache.checkedAt < updateCacheTtl) return parseRelease(cache.manifest, source);
     if (limited?.retryAt && now() < limited.retryAt) {
       throw new UpdateError(`检查更新太频繁，请约 ${Math.ceil((limited.retryAt - now()) / 1000)} 秒后重试`, limited.retryAt);
     }
     let manifest: unknown;
-    try { manifest = await fetchManifest(transport, signal); }
+    try { manifest = await fetchManifest(transport, source, signal); }
     catch (error) {
       if (error instanceof UpdateError && error.retryAt) limited = error;
       throw error;
@@ -192,7 +204,7 @@ export function createUpdateChecker(transport: Transport, storage: UpdateCacheSt
     limited = null;
     try { await storage.write(JSON.stringify(cache)); }
     catch { /* 写入失败仍保留本次结果与内存缓存。 */ }
-    return parseRelease(manifest);
+    return parseRelease(manifest, source);
   }
 
   return async function check(current: AppVersion, signal?: AbortSignal): Promise<UpdateResult> {
@@ -220,4 +232,39 @@ export function createUpdateChecker(transport: Transport, storage: UpdateCacheSt
       }
     }
   };
+}
+
+type CheckUpdates = ReturnType<typeof createUpdateChecker>;
+
+export async function checkRegionalUpdates(
+  checks: Record<ReleaseSource, CheckUpdates>,
+  region: string | null | undefined,
+  current: AppVersion,
+  signal?: AbortSignal,
+): Promise<UpdateResult> {
+  if (signal?.aborted) throw new UpdateError('已取消检查更新');
+  if (region) {
+    const primary = region.toUpperCase() === 'CN' ? 'cnb' : 'github';
+    const backup = primary === 'cnb' ? 'github' : 'cnb';
+    try {
+      return await checks[primary](current, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return checks[backup](current, signal);
+    }
+  }
+
+  const race = new AbortController();
+  const cancel = () => race.abort();
+  signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    return await Promise.any([checks.github(current, race.signal), checks.cnb(current, race.signal)]);
+  } catch (error) {
+    if (signal?.aborted) throw new UpdateError('已取消检查更新');
+    const cause = error instanceof AggregateError ? error.errors[0] : error;
+    throw cause;
+  } finally {
+    race.abort();
+    signal?.removeEventListener('abort', cancel);
+  }
 }

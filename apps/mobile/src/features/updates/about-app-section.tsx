@@ -5,8 +5,10 @@ import Svg, { Path } from 'react-native-svg';
 import { Button, Text, XStack, YStack, useTheme } from 'tamagui';
 import appConfig from '../../../app.json';
 import { GroupedList, SectionTitle } from '../../ui';
-import { latestReleaseUrl, repositoryUrl, type AppRelease } from './release-update';
+import { latestReleaseUrl, releaseApkUrl, repositoryUrl, type AppRelease, type ReleaseSource } from './release-update';
 import { checkCachedUpdates } from './update-checker';
+
+const sourceNames = { cnb: 'CNB 国内源', github: 'GitHub' };
 
 function AboutRow({ kind, indexLabel, title, detail, action, busy, last, onPress }: {
   kind: 'update' | 'repo'; indexLabel: string; title: string; detail: string; action?: string; busy?: boolean; last?: boolean; onPress: () => void;
@@ -40,7 +42,7 @@ export function AboutAppSection() {
   const [failed, setFailed] = useState(false);
   const [release, setRelease] = useState<AppRelease | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [opening, setOpening] = useState(false);
+  const [opening, setOpening] = useState<ReleaseSource | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const pending = useRef<AbortController | null>(null);
   const mounted = useRef(true);
@@ -77,14 +79,16 @@ export function AboutAppSection() {
       }
     }
   }
-  async function download() {
+  const alternateSource = release?.source === 'cnb' ? 'github' : 'cnb';
+
+  async function download(source: ReleaseSource) {
     if (!release || opening) return;
-    setOpening(true); setDownloadError('');
+    setOpening(source); setDownloadError('');
     try {
-      await Linking.openURL(Platform.OS === 'android' ? release.apkUrl : release.releaseUrl);
-      if (mounted.current) setDialogOpen(false);
-    } catch { if (mounted.current) setDownloadError('无法打开下载链接，请稍后重试'); }
-    finally { if (mounted.current) setOpening(false); }
+      const url = source === release.source ? release.apkUrl : releaseApkUrl(source, release.tag, release.version);
+      await Linking.openURL(url);
+    } catch { if (mounted.current) setDownloadError('无法打开下载链接，请更换下载源或稍后重试'); }
+    finally { if (mounted.current) setOpening(null); }
   }
   return <>
     <SectionTitle>关于</SectionTitle>
@@ -107,8 +111,12 @@ export function AboutAppSection() {
           </ScrollView>
           {!!downloadError && <Text color="$danger" fontSize={12} lineHeight={18} accessibilityRole="alert">{downloadError}</Text>}
           <Button minHeight={52} borderRadius={18} backgroundColor="$actionSurface" color="$actionText" borderWidth={1} borderColor="$actionBorder" fontSize={15} fontWeight="500"
-            disabled={opening} accessibilityState={{ disabled: opening, busy: opening }} pressStyle={{ backgroundColor: '$actionSurface', borderColor: '$actionBorder', opacity: 0.8 }} onPress={() => { void download(); }}>
-            {opening ? '正在打开…' : '前往下载'}
+            disabled={!!opening} accessibilityState={{ disabled: !!opening, busy: opening === release?.source }} pressStyle={{ backgroundColor: '$actionSurface', borderColor: '$actionBorder', opacity: 0.8 }} onPress={() => { if (release) void download(release.source); }}>
+            {release && opening === release.source ? '正在打开…' : release ? `前往下载（${sourceNames[release.source]}）` : '前往下载'}
+          </Button>
+          <Button minHeight={44} borderRadius={14} backgroundColor="$soft" color="$color" fontSize={13} fontWeight="500"
+            disabled={!!opening} accessibilityState={{ disabled: !!opening, busy: opening === alternateSource }} pressStyle={{ opacity: 0.72 }} onPress={() => { void download(alternateSource); }}>
+            {opening === alternateSource ? '正在打开…' : `换用 ${sourceNames[alternateSource]} 下载`}
           </Button>
           <Pressable onPress={() => setDialogOpen(false)} accessibilityRole="button" accessibilityLabel="稍后再说" style={({ pressed }) => ({ minHeight: 42, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}>
             <Text color="$muted" fontSize={13}>稍后再说</Text>

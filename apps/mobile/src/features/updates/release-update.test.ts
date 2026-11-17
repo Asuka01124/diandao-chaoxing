@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { checkForUpdates, compareVersions, createUpdateChecker, evaluateUpdate, parseRelease, releaseManifestUrl, repositoryUrl, updateCacheTtl, type UpdateCacheStorage } from './release-update';
+import { checkForUpdates, checkRegionalUpdates, cnbReleaseManifestUrl, cnbRepositoryUrl, releaseApkUrl, compareVersions, createUpdateChecker, evaluateUpdate, parseRelease, releaseManifestUrl, repositoryUrl, updateCacheTtl, type UpdateCacheStorage } from './release-update';
 
 function fixture(version = '1.6', versionCode = 290003, tag = `v${version}`) {
   return {
@@ -224,4 +224,67 @@ test('过期缓存不能把网络错误当成已是最新，缺少静态附件�
   }, storage);
   await expect(check({ version: '1.6', versionCode: 290003 })).rejects.toThrow('未找到');
   expect(calls).toBe(1);
+});
+
+function cnbFixture() {
+  const value = fixture();
+  return {
+    ...value,
+    html_url: `${cnbRepositoryUrl}/-/releases/tag/v1.6`,
+    assets: [{ ...value.assets[0], browser_download_url: releaseApkUrl('cnb', 'v1.6', '1.6') }],
+  };
+}
+
+test('中国大陆优先请求 CNB，其他地区优先请求 GitHub', async () => {
+  for (const [region, expected] of [['CN', 'cnb'], ['JP', 'github']] as const) {
+    const calls: string[] = [];
+    const transport = async (url: string) => {
+      calls.push(url);
+      return Response.json(url === cnbReleaseManifestUrl ? cnbFixture() : fixture());
+    };
+    const checks = {
+      cnb: createUpdateChecker(transport, memoryStorage(), Date.now, 'cnb'),
+      github: createUpdateChecker(transport, memoryStorage()),
+    };
+    const result = await checkRegionalUpdates(checks, region, { version: '1.5', versionCode: 280002 });
+    expect(result.release.source).toBe(expected);
+    expect(calls).toEqual([expected === 'cnb' ? cnbReleaseManifestUrl : releaseManifestUrl]);
+  }
+});
+
+test('国内源不可用时切换 GitHub，并为相同版本生成合法的替代下载路径', async () => {
+  const calls: string[] = [];
+  const transport = async (url: string) => {
+    calls.push(url);
+    return url === cnbReleaseManifestUrl ? new Response('', { status: 503 }) : Response.json(fixture());
+  };
+  const checks = {
+    cnb: createUpdateChecker(transport, memoryStorage(), Date.now, 'cnb'),
+    github: createUpdateChecker(transport, memoryStorage()),
+  };
+  const { release } = await checkRegionalUpdates(checks, 'CN', { version: '1.5', versionCode: 280002 });
+  expect(calls).toEqual([cnbReleaseManifestUrl, releaseManifestUrl]);
+  expect(release.source).toBe('github');
+  expect(releaseApkUrl('cnb', release.tag, release.version)).toBe(`${cnbRepositoryUrl}/-/releases/download/v1.6/daodian-v1.6-arm64.apk`);
+});
+
+test('地区未知时用先返回有效信息的源并中止另一请求', async () => {
+  let slowerSignal: AbortSignal | null | undefined;
+  const github = createUpdateChecker((_url, init) => new Promise((_resolve, reject) => {
+    slowerSignal = init.signal;
+    init.signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+  }), memoryStorage());
+  const cnb = createUpdateChecker(async () => Response.json(cnbFixture()), memoryStorage(), Date.now, 'cnb');
+  const result = await checkRegionalUpdates({ github, cnb }, null, { version: '1.5', versionCode: 280002 });
+  expect(result.release.source).toBe('cnb');
+  expect((slowerSignal as AbortSignal | undefined)?.aborted).toBe(true);
+});
+
+test('CNB 清单只接受镜像仓库的固定路径，且不与 GitHub 缓存交叉', () => {
+  expect(parseRelease(cnbFixture(), 'cnb').source).toBe('cnb');
+  expect(() => parseRelease(cnbFixture())).toThrow();
+  expect(() => parseRelease(fixture(), 'cnb')).toThrow();
+  const value = cnbFixture();
+  value.assets[0].browser_download_url = 'https://example.com/app.apk';
+  expect(() => parseRelease(value, 'cnb')).toThrow();
 });

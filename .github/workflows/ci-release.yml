@@ -135,3 +135,33 @@ jobs:
           test "$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)" = "$GITHUB_SHA"
           gh release upload "$TAG" "$APK" update.json SHA256SUMS --clobber
           gh release edit "$TAG" --draft=false --latest --title "到点 $VERSION" --notes-file RELEASE_NOTES.md
+
+  mirror:
+    name: 同步国内 CNB 下载源
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-release
+          path: dist/release
+      - name: 同步已发布的签名 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CNB_RELEASE_TOKEN: ${{ secrets.CNB_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)" != "$GITHUB_SHA" ]; then
+            echo 'main 已更新，跳过旧提交的 CNB 同步'
+            exit 0
+          fi
+          node scripts/ci/mirror-cnb.cjs
