@@ -62,7 +62,7 @@ export default function AccountsScreen() {
   const target = delegates.find(a => a.id === selected);
 
   return <AppScreen title="代签账号" headerAction={<Pressable onPress={openAddSheet} accessibilityRole="button" accessibilityLabel="添加代签账号"
-    style={({ pressed }) => ({ backgroundColor: theme.actionSurface.val, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, opacity: pressed ? 0.72 : 1 })}>
+    style={({ pressed }) => ({ backgroundColor: theme.actionSurface.val, borderWidth: 1, borderColor: theme.actionBorder.val, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, opacity: pressed ? 0.72 : 1 })}>
     <Text color="$actionText" fontSize={12} fontWeight="500">+ 添加</Text>
   </Pressable>}>
     <SectionTitle meta={String(delegates.length).padStart(2, '0')}>已添加</SectionTitle>

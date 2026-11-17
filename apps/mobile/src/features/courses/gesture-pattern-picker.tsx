@@ -31,7 +31,7 @@ export function GesturePatternPicker({ value, onChange }: { value: string; onCha
           style={({ pressed }) => ({ position: 'absolute', left: (index % 3) * CELL, top: Math.floor(index / 3) * CELL,
             width: CELL, height: CELL, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.68 : 1 })}>
           <View style={{ width: 48, height: 48, borderRadius: 24,
-            backgroundColor: selected ? theme.actionSurface.val : theme.soft.val, alignItems: 'center', justifyContent: 'center' }}>
+            backgroundColor: selected ? theme.actionSurface.val : theme.soft.val, borderWidth: 1, borderColor: selected ? theme.actionBorder.val : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
             <Text color={selected ? '$actionText' : '$muted'} fontSize={15} fontWeight="500">{digit}</Text>
           </View>
           {selected && <View style={{ position: 'absolute', right: 8, top: 8, minWidth: 20, height: 20, borderRadius: 10,

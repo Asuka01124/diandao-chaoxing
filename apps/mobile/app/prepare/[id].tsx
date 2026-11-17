@@ -102,7 +102,7 @@ export default function PrepareScreen() {
             const active = location?.latitude === item.latitude && location?.longitude === item.longitude && location?.address === item.address;
             return <Pressable key={index} onPress={() => { setLocation(item); setError(''); notify('已选用常用位置', 'success'); }}
               accessibilityRole="button" accessibilityLabel={`选用常用位置 ${item.address}`} accessibilityState={{ selected: active }}
-              style={({ pressed }) => ({ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, backgroundColor: active ? theme.actionSurface.val : theme.soft.val, opacity: pressed ? 0.65 : 1 })}>
+              style={({ pressed }) => ({ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, backgroundColor: active ? theme.actionSurface.val : theme.soft.val, borderWidth: 1, borderColor: active ? theme.actionBorder.val : 'transparent', opacity: pressed ? 0.65 : 1 })}>
               <Text color={active ? '$actionText' : '$muted'} fontSize={12} fontWeight="500">{item.address}</Text>
             </Pressable>;
           })}
@@ -165,7 +165,7 @@ export default function PrepareScreen() {
         last={index === data.accounts.length - 1}
         onPress={() => { setError(''); setSelected(checked ? selected.filter(id => id !== a.id) : [...selected, a.id]); }}
         accessory={<YStack width={22} height={22} borderRadius={11} alignItems="center" justifyContent="center"
-          backgroundColor={checked ? '$actionSurface' : 'transparent'} borderWidth={checked ? 0 : 1.5} borderColor="$fieldBorder">
+          backgroundColor={checked ? '$actionSurface' : 'transparent'} borderWidth={1.5} borderColor={checked ? '$actionBorder' : '$fieldBorder'}>
           {checked && <Text color="$actionText" fontSize={12} fontWeight="600">✓</Text>}
         </YStack>} />;
     })}</GroupedList>

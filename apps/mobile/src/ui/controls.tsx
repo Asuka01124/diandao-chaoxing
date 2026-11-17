@@ -35,12 +35,12 @@ export function PrimaryButton({ children, onPress, disabled, danger, variant = '
   const isSecondary = variant === 'secondary' && !danger;
   const bg = danger ? '$dangerSoft' : isSecondary ? '$secondarySurface' : '$actionSurface';
   const fg = danger ? '$danger' : isSecondary ? '$secondaryText' : '$actionText';
+  const border = isSecondary ? '$secondaryBorder' : '$actionBorder';
   const spinnerColor = danger ? theme.danger.val : isSecondary ? theme.secondaryText.val : theme.actionText.val;
   return <Button backgroundColor={bg} color={fg}
-    borderWidth={isSecondary ? 1 : 0} borderColor={isSecondary ? '$secondaryBorder' : 'transparent'} borderRadius={18} minHeight={isSecondary ? 48 : 54} fontSize={15} fontWeight="500"
-    shadowColor="#000000" shadowOpacity={danger || isSecondary ? 0 : 0.08} shadowRadius={12} shadowOffset={{ width: 0, height: 4 }} elevation={danger || isSecondary ? 0 : 2}
+    borderWidth={danger ? 0 : 1} borderColor={border} borderRadius={18} minHeight={isSecondary ? 48 : 54} fontSize={15} fontWeight="500"
     disabled={blocked} opacity={blocked ? 0.45 : 1}
-    accessibilityLabel={children} accessibilityState={{ disabled: !!blocked, busy: !!loading }} pressStyle={{ opacity: 0.72, scale: 0.988 }} onPress={onPress}>
+    accessibilityLabel={children} accessibilityState={{ disabled: !!blocked, busy: !!loading }} pressStyle={{ backgroundColor: bg, borderColor: border, opacity: 0.72, scale: 0.988 }} onPress={onPress}>
     {loading && <ActivityIndicator size="small" color={spinnerColor} />}{children}
   </Button>;
 }

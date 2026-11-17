@@ -106,8 +106,8 @@ export function AboutAppSection() {
             <Text color="$muted" fontSize={13} lineHeight={21}>{release?.notes}</Text>
           </ScrollView>
           {!!downloadError && <Text color="$danger" fontSize={12} lineHeight={18} accessibilityRole="alert">{downloadError}</Text>}
-          <Button minHeight={52} borderRadius={18} backgroundColor="$actionSurface" color="$actionText" fontSize={15} fontWeight="500"
-            disabled={opening} accessibilityState={{ disabled: opening, busy: opening }} pressStyle={{ opacity: 0.8 }} onPress={() => { void download(); }}>
+          <Button minHeight={52} borderRadius={18} backgroundColor="$actionSurface" color="$actionText" borderWidth={1} borderColor="$actionBorder" fontSize={15} fontWeight="500"
+            disabled={opening} accessibilityState={{ disabled: opening, busy: opening }} pressStyle={{ backgroundColor: '$actionSurface', borderColor: '$actionBorder', opacity: 0.8 }} onPress={() => { void download(); }}>
             {opening ? '正在打开…' : '前往下载'}
           </Button>
           <Pressable onPress={() => setDialogOpen(false)} accessibilityRole="button" accessibilityLabel="稍后再说" style={({ pressed }) => ({ minHeight: 42, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}>

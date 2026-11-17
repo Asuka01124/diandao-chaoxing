@@ -42,7 +42,7 @@ export function OngoingAttendanceCard({ entries, onPress, onQuickSign }: {
             </YStack>
           </Pressable>
           <Pressable onPress={quickHandler} accessibilityRole="button" accessibilityLabel={`去签到 ${course.name}`}
-            style={({ pressed }) => ({ backgroundColor: theme.actionSurface.val, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, opacity: pressed ? 0.72 : 1 })}>
+            style={({ pressed }) => ({ backgroundColor: theme.actionSurface.val, borderWidth: 1, borderColor: theme.actionBorder.val, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, opacity: pressed ? 0.72 : 1 })}>
             <Text color="$actionText" fontSize={12} lineHeight={16} fontWeight="500">去签到 ›</Text>
           </Pressable>
         </XStack>;

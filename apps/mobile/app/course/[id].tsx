@@ -50,7 +50,7 @@ export default function CourseActivitiesScreen() {
     const ongoing = a.signed === false && activityPhase(a) !== 'ended';
     return <SettingsRow key={a.id} title={a.title} last={index === items.length - 1}
       {...attendanceRow(a)}
-      accessory={ongoing ? <YStack backgroundColor="$actionSurface" paddingHorizontal={12} paddingVertical={6} borderRadius={999}><Text color="$actionText" fontSize={12} fontWeight="500">签到 ›</Text></YStack> : undefined}
+      accessory={ongoing ? <YStack backgroundColor="$actionSurface" borderWidth={1} borderColor="$actionBorder" paddingHorizontal={12} paddingVertical={6} borderRadius={999}><Text color="$actionText" fontSize={12} fontWeight="500">签到 ›</Text></YStack> : undefined}
       onPress={() => router.push({ pathname: '/activity/[id]', params: { id: a.id, accountId: account?.id } })} />;
   }) : <EmptyState title={busy ? '正在加载…' : emptyTitle} />}</GroupedList>;
   return <AppScreen title={name || '课程签到'} backLabel="课程" onBack={() => router.back()} headerAction={<Pressable accessibilityRole="button" accessibilityLabel={busy ? '正在刷新签到活动' : '刷新签到活动'} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void refresh(true); }}
