@@ -1,5 +1,13 @@
 # Android APK 构建记录（Windows）
 
+## 2026-11-16 真机验证构建
+
+- 最早的 Gradle 错误为 `Configuring project ':react-native-worklets' without an existing directory`。仓库移动到 `D:\Projects\diandao-chaoxing` 后，`apps/mobile/android/build/generated/autolinking/autolinking.json` 仍缓存旧路径 `D:\diandao-chaoxing`。
+- 将这份生成的 JSON 改名备份后重跑标准脚本。新生成的自动链接缓存指向当前项目目录，Gradle 通过配置并进入原生模块构建。
+- Gradle 子进程的 Metro 无法从工作区链接解析 `expo-router/entry`，改用本地入口后仍遇到 `@sign/shared` 解析和 Expo 文件 SHA-1 索引错误。用忽略目录中的临时入口导入 `expo-router/entry`，在 `apps/mobile` 单独执行 Expo Android 导出，再用仓库安装的 Hermes 编译。将生成的字节码和资源交给 Gradle 后，`:app:createBundleReleaseJsAndAssets` 任务通过。原生生成文件中的临时配置在构建结束时恢复。
+- 原生编译随后报告离线缓存缺少 `androidx.collection:collection:1.0.0` 和 `androidx.annotation:annotation-jvm:1.8.1`。本次临时允许构建从官方 Maven 仓库下载两项依赖，缓存文件和 Expo Constants 编译均已核实。
+- 2026-11-17 使用同签名本地验证构建，临时跳过 R8、资源裁剪和发布 lint。Gradle 在 2m 53s 内构建成功，APK 签名、包名、版本、arm64 架构及内置 Hermes 字节码校验通过。
+
 ## 1.7.1 CI 构建（2026-10-14）
 
 - 首次运行 [38581253904](https://github.com/Asuka01124/diandao-chaoxing/actions/runs/38581253904) 的离线测试与类型检查通过，Android 构建在安装 `ndk;27.0.12077973` 时失败。
