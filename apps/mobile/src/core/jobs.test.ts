@@ -29,7 +29,7 @@ mock.module('./api', () => ({
     upload: async (s: ProviderSession) => { providerCalls.push('upload'); return behavior.upload(s.userId); },
   },
 }));
-const { createJob, runJob, cleanupCompletedPhoto, replaceQrAndResume, provideFaceAndResume, retryAttempt } = await import('./jobs');
+const { createJob, runJob, cleanupCompletedPhoto, replaceQrAndResume, provideFaceAndResume, retryAttempt, checkChallenge } = await import('./jobs');
 
 const activity: Activity = { id: 'act', courseId: 'course', classId: 'class', source: 'course', title: '测试签到', kind: 'click', startTime: null, endTime: null, signed: null, ext: '{}' };
 const legacyActivities = (): Activity[] => (['click', 'location', 'photo', 'qr', 'code', 'gesture'] as const)
@@ -140,6 +140,25 @@ test('签到前解析失败明确说明未提交，重试不会绕过核查', as
   expect(state.get().attempts[0].count).toBe(0);
   expect(providerCalls).not.toContain('status');
 });
+test('二维码等待验证时只核查结果，学习通确认已签后才记为成功', async () => {
+  const state = store();
+  const job = await createJob(state, { ...activity, kind: 'qr' }, ['a'], {
+    kind: 'qr', qrPayload: 'https://mobilelearn.chaoxing.com/x?aid=act&enc=test', scannedAt: new Date().toISOString(),
+  });
+  behavior.prepare = async () => ({ state: 'WAITING_FACE' });
+  await runJob(state, job.id);
+  providerCalls.length = 0;
+
+  await expect(checkChallenge(state, job.id, 'a')).rejects.toThrow('学习通仍显示未签到，请完成验证和签到');
+  expect(state.get().attempts[0]).toMatchObject({ state: 'WAITING_FACE', count: 0 });
+  behavior.status = async () => ({ state: 'SIGNED' });
+  await checkChallenge(state, job.id, 'a');
+
+  expect(providerCalls).toEqual(['status', 'status']);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'SUCCESS', count: 0 });
+  expect(state.get().jobs[0].state).toBe('DONE');
+});
+
 test('人脸等待状态在提供该账号照片后继续', async () => {
   const state = store(); let signed = false;
   behavior.prepare = async (_id, faceMediaId) => faceMediaId ? undefined : { state: 'WAITING_FACE' };
@@ -151,6 +170,22 @@ test('人脸等待状态在提供该账号照片后继续', async () => {
   await provideFaceAndResume(state, job.id, 'a', 'image-a');
   expect(state.get().attempts[0].state).toBe('SUCCESS');
   expect(state.get().attempts[0].count).toBe(1);
+});
+
+test('二维码人脸等待在提供照片后携带照片继续提交', async () => {
+  const state = store(); let signed = false; const seenFace: (string | undefined)[] = [];
+  behavior.prepare = async (_id, faceMediaId) => { seenFace.push(faceMediaId); return faceMediaId ? undefined : { state: 'WAITING_FACE' }; };
+  behavior.submit = async () => { signed = true; return { state: 'SIGNED', submitted: true }; };
+  behavior.status = async () => ({ state: signed ? 'SIGNED' : 'READY' });
+  const job = await createJob(state, { ...activity, kind: 'qr' }, ['a'], {
+    kind: 'qr', qrPayload: 'https://mobilelearn.chaoxing.com/x?aid=act&enc=test', scannedAt: new Date().toISOString(),
+  });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0].state).toBe('WAITING_FACE');
+  seenFace.length = 0;
+  await provideFaceAndResume(state, job.id, 'a', 'image-a');
+  expect(seenFace).toEqual(['image-a']);
+  expect(state.get().attempts[0].state).toBe('SUCCESS');
 });
 
 test('准备阶段超时不进入提交核验，也不增加次数', async () => {

@@ -9,6 +9,7 @@ import {
 import { readActivityDetail, readCourseActivities } from './activities';
 import { attendanceState } from './attendance';
 import { ProviderError } from './errors';
+import { buildFaceResult } from './face';
 import { json, responseMessage } from './response';
 import { allowedHost, RequestSession, type Transport } from './session';
 
@@ -157,13 +158,15 @@ export function parseSubmitResponse(response: string): SignStatus {
       throw new ProviderError('QR_EXPIRED', '二维码已过期');
   }
   if (message.startsWith('validate')) return { state: 'WAITING_CAPTCHA' };
-  if (message.startsWith('checkFace_') || message.startsWith('[face]')) {
-    return { state: 'WAITING_FACE' };
+  const detail = responseMessage(message);
+  if (message.startsWith('checkFace_') || message.startsWith('[face]') ||
+      /^(?:请先(?:进行|完成)人脸验证|活体验证参数缺失)[。！!]?$/.test(detail)) {
+    return { state: 'WAITING_FACE', message: '请在学习通完成人脸验证和签到' };
   }
   if (message.startsWith('errorLocation')) {
     throw new ProviderError('LOCATION_REJECTED', '位置不在允许范围');
   }
-  throw new ProviderError('PROVIDER_CHANGED', `学习通返回：${responseMessage(response) || '空签到响应'}`);
+  throw new ProviderError('PROVIDER_CHANGED', `学习通返回：${detail || '空签到响应'}`);
 }
 
 export function parseQrPayload(payload: string, expectedId: string): { enc: string; code?: string } {
@@ -209,13 +212,9 @@ async function requestFaceProof(
   client: RequestSession,
   activityId: string,
   mediaId: string,
+  clientId?: string,
 ): Promise<string> {
-  const faceResult = JSON.stringify({
-    currentFaceId: mediaId,
-    LiveDetectionStatus: 1,
-    collectStatus: 1,
-    cxtime: String(Date.now()),
-  });
+  const faceResult = buildFaceResult(mediaId, clientId);
   const response = await json(await client.request(apiUrl('/pptSign/check-face-result', {
     DB_STRATEGY: 'PRIMARY_KEY',
     STRATEGY_PARA: 'activeId',
@@ -306,7 +305,7 @@ async function submissionUrl(
   }
 
   if (faceMediaId) {
-    const proof = await requestFaceProof(client, activity.id, faceMediaId);
+    const proof = await requestFaceProof(client, activity.id, faceMediaId, account.clientId);
     query.set('currentFaceId', faceMediaId);
     query.set('ifCFP', '0');
     query.set('faceEnc', proof);

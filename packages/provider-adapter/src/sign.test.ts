@@ -168,6 +168,78 @@ test('已签到、截止、等待验证和准备失败均不增加提交次数',
   }
 });
 
+test('二维码人脸签到：未提供照片时等待，提供照片后携带 faceEnc 提交', async () => {
+  const target: Activity = { ...activity, kind: 'qr' };
+  const input = {
+    kind: 'qr' as const,
+    qrPayload: `https://mobilelearn.chaoxing.com/x?aid=${target.id}&enc=test`,
+    scannedAt: new Date().toISOString(),
+  };
+  const waitingCalls: string[] = [];
+  const waiting = await submit(account, target, input, async url => {
+    const path = new URL(url).pathname;
+    waitingCalls.push(path);
+    if (path.endsWith('/preSign')) return new Response('signstatus = 0');
+    if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 2, openCheckFaceFlag: 1 } });
+    throw new Error('缺少人脸照片时不应提交');
+  });
+  expect(waiting.state).toBe('WAITING_FACE');
+  expect(waitingCalls).toEqual(['/newsign/preSign', '/v2/apis/active/getPPTActiveInfo']);
+
+  let signed = false;
+  const result = await submit(account, target, { ...input, scannedAt: new Date().toISOString() }, async url => {
+    const targetUrl = new URL(url);
+    const path = targetUrl.pathname;
+    if (path.endsWith('/preSign')) return new Response(`signstatus = ${signed ? 1 : 0}`);
+    if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 2, openCheckFaceFlag: 1 } });
+    if (path.endsWith('/analysis')) return new Response("code='+'abc'");
+    if (path.endsWith('/analysis2')) return new Response('ok');
+    if (path.endsWith('/check-face-result')) {
+      const faceResult = JSON.parse(targetUrl.searchParams.get('faceResult')!);
+      expect(faceResult.currentFaceId).toBe('face-photo');
+      expect(faceResult.LiveDetectionStatus).toBe(1);
+      return Response.json({ enc: 'face-ok' });
+    }
+    if (path.endsWith('/stuSignajax')) {
+      expect(targetUrl.searchParams.get('faceEnc')).toBe('face-ok');
+      expect(targetUrl.searchParams.get('currentFaceId')).toBe('face-photo');
+      expect(targetUrl.searchParams.get('enc')).toBe('test');
+      signed = true;
+      return new Response('success');
+    }
+    throw new Error('遇到未知请求');
+  }, 'face-photo');
+  expect(result).toMatchObject({ state: 'SIGNED', submitted: true });
+});
+
+test('会话 clientId 透传到人脸材料，无法解码时仍按无签名提交', async () => {
+  let signed = false;
+  const result = await submit({ ...account, clientId: 'undecodable-client-id' }, activity, { kind: 'click' }, async url => {
+    const target = new URL(url);
+    const path = target.pathname;
+    if (path.endsWith('/preSign')) return new Response(`signstatus = ${signed ? 1 : 0}`);
+    if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 0, openCheckFaceFlag: 1 } });
+    if (path.endsWith('/analysis')) return new Response("code='+'abc'");
+    if (path.endsWith('/analysis2')) return new Response('ok');
+    if (path.endsWith('/check-face-result')) {
+      const faceResult = JSON.parse(target.searchParams.get('faceResult')!);
+      expect(faceResult.currentFaceId).toBe('face-photo');
+      expect(faceResult.LiveDetectionStatus).toBe(1);
+      expect(faceResult.signToken).toBeUndefined();
+      return Response.json({ enc: 'face-ok' });
+    }
+    if (path.endsWith('/stuSignajax')) { signed = true; return new Response('success'); }
+    throw new Error('遇到未知请求');
+  }, 'face-photo');
+  expect(result).toMatchObject({ state: 'SIGNED', submitted: true });
+});
+
+test('明确的人脸和活体提示归入等待验证', () => {
+  expect(parseSubmitResponse('请先完成人脸验证。').state).toBe('WAITING_FACE');
+  expect(parseSubmitResponse('{"result":false,"msg":"活体验证参数缺失"}').state).toBe('WAITING_FACE');
+  expect(() => parseSubmitResponse('人脸模块暂时不可用')).toThrow('人脸模块暂时不可用');
+});
+
 test('保留学习通文本、JSON 和 HTTP 失败原因，已发请求仍计数', async () => {
   expect(() => parseSubmitResponse('教师已结束本次活动')).toThrow('教师已结束本次活动');
   expect(() => parseSubmitResponse('{"result":false,"msg":"签到码错误"}')).toThrow('签到码错误');

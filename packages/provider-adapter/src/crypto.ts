@@ -1,4 +1,12 @@
-import { createCipheriv, createDecipheriv } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash } from 'node:crypto';
+
+export function md5Hex(value: string): string {
+  return createHash('md5').update(value, 'utf8').digest('hex');
+}
+
+export function sha256Hex(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
 
 export function encryptLoginValue(value: string): string {
   const key = Buffer.from('u2oh6Vu^HWe4_AES', 'utf8');

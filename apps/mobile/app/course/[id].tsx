@@ -2,15 +2,14 @@ import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { Text, YStack, useTheme } from 'tamagui';
+import { YStack, useTheme } from 'tamagui';
 import type { Activity } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
-import { activityPhase } from '../../src/features/courses/activity-phase';
 import { attendanceRow, courseAttendanceGroups } from '../../src/features/courses/attendance-list';
-import { isDemoCourse } from '../../src/features/courses/demo-course';
+import { isDemoCourse, isPracticeCourse } from '../../src/features/courses/demo-course';
 import { useVault } from '../../src/state';
-import { AppScreen, EmptyState, FeedbackNotice, GroupedList, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
+import { AppScreen, EmptyState, FeedbackNotice, GroupedList, Message, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
 
 export default function CourseActivitiesScreen() {
   const { id, classId, accountId, name } = useLocalSearchParams<{ id: string; classId: string; accountId?: string; name?: string }>();
@@ -27,7 +26,7 @@ export default function CourseActivitiesScreen() {
     if (!account || !id || !classId || isDemoCourse(id)) return;
     setBusy(true); setError('');
     try {
-      const session = await api.check(account.session);
+      const session = await api.check(account.session, isPracticeCourse(id));
       const activities = await api.activities(session, id, classId);
       await store.update(v => {
         const item = v.accounts.find(a => a.id === account.id);
@@ -47,10 +46,8 @@ export default function CourseActivitiesScreen() {
   const groups = courseAttendanceGroups(data.activityCache, account?.id ?? '', id, classId);
   const count = groups.unsigned.length + groups.signed.length + groups.unknown.length;
   const rows = (items: Activity[], emptyTitle: string) => <GroupedList>{items.length ? items.map((a, index) => {
-    const ongoing = a.signed === false && activityPhase(a) !== 'ended';
     return <SettingsRow key={a.id} title={a.title} last={index === items.length - 1}
       {...attendanceRow(a)}
-      accessory={ongoing ? <YStack backgroundColor="$actionSurface" borderWidth={1} borderColor="$actionBorder" paddingHorizontal={12} paddingVertical={6} borderRadius={999}><Text color="$actionText" fontSize={12} fontWeight="500">签到 ›</Text></YStack> : undefined}
       onPress={() => router.push({ pathname: '/activity/[id]', params: { id: a.id, accountId: account?.id } })} />;
   }) : <EmptyState title={busy ? '正在加载…' : emptyTitle} />}</GroupedList>;
   return <AppScreen title={name || '课程签到'} backLabel="课程" onBack={() => router.back()} headerAction={<Pressable accessibilityRole="button" accessibilityLabel={busy ? '正在刷新签到活动' : '刷新签到活动'} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void refresh(true); }}
@@ -58,6 +55,7 @@ export default function CourseActivitiesScreen() {
     {busy ? <ActivityIndicator size="small" color={theme.brand.val} /> : <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Path d="M20 11a8 8 0 1 1-2.5-5.8M20 4v6h-6" stroke={theme.muted.val} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
   </Pressable>}>
     {!!error && <FeedbackNotice message={error} tone="error" />}
+    {isPracticeCourse(id) && <YStack marginBottom={14}><Message>本机演练：按真实学习通协议模拟签到与人脸校验，不发送任何真实请求；重启应用后演练进度重置。</Message></YStack>}
     {(!error || count > 0) && <>
       <SectionTitle meta={groups.unsigned.length ? String(groups.unsigned.length).padStart(2, '0') : undefined}>未签到</SectionTitle>{rows(groups.unsigned, '暂无未签到活动')}
       <SectionTitle meta={groups.signed.length ? String(groups.signed.length).padStart(2, '0') : undefined}>已签到</SectionTitle>{rows(groups.signed, '暂无已签到活动')}

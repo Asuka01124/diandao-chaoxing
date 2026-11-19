@@ -1,5 +1,45 @@
 # Android APK 构建记录（Windows）
 
+## 2026-11-19 UI 去冗余清理包（r3）
+
+- 八项 UI 清理：任务页错误只显示横幅（去重复浮层）、活动页移除「刷新状态」及自动查询、任务页副标题解释与底部说明段删除（`job-result` 的 `detail` 字段移除）、活动页副标题删除、已签到隐藏「去准备签到」且「进行中的签到」卡片过滤已签到、任务页瞬时 toast 全部移除、账号行小字仅保留失败原因、课程页活动行小「签到 ›」胶囊移除且行小字只留阶段。157 项测试与类型检查通过。
+- 复用已验证流程（`cliFile` 绝对路径、`.bun` 真实路径短盘符 staging、临时关闭 R8/资源裁剪）。`BUILD SUCCESSFUL in 4m 8s`，日志 `.tooling/build-apk-20261119-235151.log`。
+- 产物 `daodian-v1.8.1-practice-r3-arm64.apk`：53,580,837 字节，包名 `dev.local.sign.tool`、版本 `1.8.1`/`42`、仅 `arm64-v8a`、原签名证书，16 KB ZIP 对齐通过。字节码确认含「用预留照片验证」、不含「刷新状态」，演练代码在包内。
+- SHA-256：`7c7610100b7a5eb15fd980b4b41deede5a0bdd91a6cd0e72179881327732f943`。构建后全部临时修改已按备份恢复。真机验收待用户。
+
+## 2026-11-19 预留照片人脸验证入口重建（r2）
+
+- 任务页 `WAITING_FACE` 增加「用预留照片验证」入口（复用 `ReservedPhotoRow`，新增 `provideFaceFromUri`），补齐人脸步骤原先只有拍照/相册的缺口。157 项测试与类型检查通过。
+- 复用上一轮已验证流程：`cliFile` 绝对路径指向 `.tooling/practice-course/copy-bundle.js`、两个 `.bun` 真实路径短盘符 staging、临时关闭 R8 与资源裁剪。`BUILD SUCCESSFUL in 3m 50s`，日志 `.tooling/build-apk-20261119-221929.log`。
+- 产物 `daodian-v1.8.1-practice-r2-arm64.apk`：53,583,261 字节，包名 `dev.local.sign.tool`、版本 `1.8.1`/`42`、仅 `arm64-v8a`、原签名证书，16 KB ZIP 对齐通过。Hermes 字节码确认含 UTF-16 的「用预留照片验证」及演练代码。
+- SHA-256：`0c2b2abfc570ce6bb0afd345bc103be7d6d0e097f6737727fd47a577f26c80e9`。构建后全部临时修改已按备份恢复。真机验证待用户。
+
+## 2026-11-19 签到演练课程测试包
+
+- 源码新增内置演练课程（`PRACTICE_COURSE_ID`、`practice-server.ts` 内存模拟服务），走真实 `provider.submit`/`signToken` 协议路径，不发真实请求。157 项离线测试与类型检查通过。
+- 第一轮最早失败在 `react-native-screens:buildCMakeRelWithDebInfo[arm64-v8a]`：ninja 在长路径 `.cxx/RelWithDebInfo/573o4g4c` 里反复 `Re-running CMake`。根因：Bun 的 `node_modules/react-native-screens` 是独立副本，Gradle 实际读取 `node_modules/.bun/react-native-screens@4.26.2+…` 下的真实文件；短路径 staging 补丁打在副本上不生效。已验证修复：把条件式 `buildStagingDirectory`（按 `DIANDAO_CMAKE_SHORT_ROOT`）补丁打到两个 `.bun` 真实路径（screens 与 gesture-handler），复用 `.tooling/qr-face-device/rns-cxx`、`rngh-cxx` 缓存，原生编译通过。原件备份于 `.tooling/practice-course/*-bun-build.gradle.orig`。
+- 第二轮最早失败在 `:app:createBundleReleaseJsAndAssets`，报 `react-native depends on @react-native-community/cli`，且 `copy-bundle.js` 未被调用（无 `wrapper-invoked.log`）。根因：`cliFile = new File(rootDir, '../../.tooling/…')` 少算一层目录——`rootDir` 是 `apps/mobile/android`，`../../` 解析到不存在的 `apps/.tooling`，插件因文件不存在回退 `react-native/cli.js`。本轮注入内容全为 ASCII，与 GBK 中文注释吞行无关。已验证修复：`cliFile` 改用绝对路径。
+- 第三轮 `BUILD SUCCESSFUL in 5m 13s`，日志 `.tooling/build-apk-20261119-000335.log`。JS 用 `bunx expo export:embed --platform android --dev false --reset-cache --entry-file node_modules/expo-router/entry.js --minify false` 独立导出到 `.tooling/practice-course/`，经 `copy-bundle.js` 交接、Gradle 自带 hermesc 编译字节码。本次测试包临时关闭 R8 与资源裁剪。
+- 产物 `daodian-v1.8.1-practice-arm64.apk`：53,583,433 字节，包名 `dev.local.sign.tool`、版本 `1.8.1`/`42`、仅 `arm64-v8a`、原签名证书，16 KB ZIP 对齐通过。Hermes 字节码确认含 `_daodian_practice_course_`/`practice-enc-`/`signToken`/`cxcid` 及 UTF-16 的「签到演练」。
+- SHA-256：`4aa981a167e96ded71e956d7406cb860c8577b2dacd55151a8dc92d4a60965de`。构建后 `app/build.gradle`、两个 `.bun` 依赖 Gradle 文件与 `config/android-packaging.json` 均已按备份恢复。演练课程真机测试待用户进行。
+
+## 2026-11-18 人脸 clientId/signToken 移植测试包
+
+- 本次源码新增 `device.ts`/`face.ts`（clientId 获取与公钥解码、signToken 签名）并打通二维码+人脸。145 项离线测试与类型检查通过。
+- 首轮标准脚本最早失败仍在 `react-native-screens:buildCMakeRelWithDebInfo[arm64-v8a]`：Ninja `manifest 'build.ninja' still dirty after 100 tries`，对象目录 200 字符加上对象文件名超出 250 上限。根因：标准脚本的短盘符 CMake staging 只覆盖 `:app`，库模块自身的 `.cxx` 仍在长 `node_modules` 路径。已验证修复：在 `react-native-screens` 与 `react-native-gesture-handler` 的 `android/build.gradle` 的 `externalNativeBuild.cmake` 里按 `DIANDAO_CMAKE_SHORT_ROOT` 环境变量条件式设置 `buildStagingDirectory` 到短盘符目录（复用 `.tooling/qr-face-device/rns-cxx`、`rngh-cxx`），原生编译通过；构建后按备份恢复两份依赖 Gradle 文件。
+- 第二轮最早失败在 `:app:createBundleReleaseJsAndAssets`，报 `react-native depends on @react-native-community/cli`。根因：往生成的 `app/build.gradle` 注入的**中文注释**在 Windows GBK 解码下吞掉行尾换行，使紧随其后的 `cliFile` 赋值并入注释，`detectCliFile` 因预设 cliFile 未生效回退到 `react-native/cli.js`（与本文档 PowerShell UTF-8 BOM 条目同源）。已验证修复：生成目录里的临时注释一律用 ASCII；`cliFile` 指向独立导出复制脚本后 bundle 任务正常。
+- JS  bundle 交接：在 `apps/mobile` 用 `bunx expo export:embed --platform android --dev false --minify false` 独立导出到 `.tooling/face-port/`（含 `index.android.js`、`res/`、源映射），临时把 `cliFile` 指向 `copy-bundle.js` 将产物复制到 Gradle 的 bundle 输出目录，再由 `BundleHermesCTask` 自带 hermesc 编译字节码。本次测试包临时关闭 R8 与资源裁剪，构建后恢复 `config/android-packaging.json`。
+- 产物 `daodian-v1.8.1-face-port-arm64.apk`：53,578,445 字节，包名 `dev.local.sign.tool`、版本 `1.8.1`/`42`、仅 `arm64-v8a`、原签名证书，16 KB ZIP 对齐通过。APK 内 Hermes 字节码确认含 `signToken`/`cxcid`/`LiveDetectionStatus`/`currentFaceId`。日志 `.tooling/build-apk-20261118-172803.log` 为 `BUILD SUCCESSFUL`。
+- SHA-256：`0f1052ffaed213cf380aa368a85b77c4212c27ce731c7f90bc0afcfe1079d8a4`。人脸验证与现场扫码仍待用户真机测试。
+
+## 2026-11-18 人脸二维码签到真机验证
+
+- 首轮标准脚本最早失败在 `react-native-screens:buildCMakeRelWithDebInfo[arm64-v8a]`，Ninja 报 `manifest 'build.ninja' still dirty after 100 tries`，并提示对象文件路径过长。备份该模块的生成缓存后仍复现。
+- 临时把 `react-native-screens` 和 `react-native-gesture-handler` 的 CMake 生成目录移到标准脚本建立的短盘符下，两者均通过原生编译。后者在原路径明确报错 `Filename longer than 260 characters`。Gradle 仍在原始仓库路径运行，构建后恢复依赖 Gradle 文件。
+- Gradle 内 Metro 未能索引本机 Bun 依赖中的 `console.js`。在独立导出进程对已存在且位于仓库内的源文件直接计算 SHA-1，成功导出资源并由 Hermes 编译字节码。
+- 将新字节码换入 1.7.9 原生包后覆盖安装成功，但启动报 `Cannot find native module 'ExpoLocalization'`。已用原版同版本 APK 覆盖恢复，并在手机上确认原版重新打开。当前源码需要一起重建原生模块。
+- 将独立导出的字节码和资源交给 Gradle，禁用本次测试包的 R8 和资源裁剪，完整原生构建通过。1.8.1（版本码 42，arm64）保留原签名，内置本次签到改动和 `ExpoLocalization`，通过 16 KB ZIP 对齐。真机从 1.7.9 覆盖安装后冷启动通过，课程、任务和设置标签正常显示。人脸验证与现场扫码仍待进行中的真实活动验证。
+
 ## 2026-11-16 真机验证构建
 
 - 最早的 Gradle 错误为 `Configuring project ':react-native-worklets' without an existing directory`。仓库移动到 `D:\Projects\diandao-chaoxing` 后，`apps/mobile/android/build/generated/autolinking/autolinking.json` 仍缓存旧路径 `D:\diandao-chaoxing`。
@@ -43,6 +83,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-android-apk.ps1
 | --- | --- | --- |
 | 改名后 CMake / autolinking 仍引用 `D:\chaoxing` | `android/app/.cxx` 等生成缓存含旧绝对路径 | 脚本使用独立 CMake staging 和短路径重写，避免复用旧配置。若仍失败，先检查日志中是否仍有旧路径，再针对出错的生成目录清理；不要直接对整个项目运行 `gradle clean`。 |
 | Ninja 报 `Filename longer than 260 characters` | Bun 安装的原生模块路径加上 CMake 输出路径超出 Windows 限制 | 脚本临时建立短盘符，并把 CMake staging 与自动链接的原生源码指向短路径；构建后撤销盘符与原生 `build.gradle` 的临时改动。 |
+| 库模块短路径补丁已打但仍在长 `.cxx` 路径编译 | Bun 的 `node_modules/<pkg>` 是独立副本，Gradle 实际用 `node_modules/.bun/<pkg>@…` 真实路径 | 补丁打到 `.bun` 真实路径的 `android/build.gradle` 并备份原件；构建后恢复。 |
+| `cliFile` 指向复制脚本却仍回退 `react-native/cli.js` | `new File(rootDir, '../../.tooling/…')` 少一层目录（`rootDir` 为 `apps/mobile/android`），文件不存在 | `cliFile` 用绝对路径；以导出目录出现 `wrapper-invoked.log` 确认交接生效。 |
 | 从短盘符运行 Gradle 出现 `this and base files have different roots` 或 Metro 入口解析失败 | Gradle 使用短盘符，Node/Expo 又返回原始 `D:` 路径，形成跨盘符混用 | **Gradle 必须从原始 `D:\diandao-chaoxing\apps\mobile\android` 路径运行**；短盘符仅供 CMake 使用。 |
 | Gradle wrapper 下载失败，或 `--offline` 报缺少 AndroidX / 高德依赖 | 项目 `.tooling/gradle` 与用户目录 `.gradle` 是两份不同缓存；所需依赖在后者 | 脚本直接调用本机 Gradle 9.3.1，并令 `GRADLE_USER_HOME=$env:USERPROFILE\.gradle`。如依赖从未下载，需先联网补齐一次。 |
 | Windows PowerShell 5.1 在脚本开头报 `Unexpected token`，中文显示乱码 | 中文 `.ps1` 被保存为不带 BOM 的 UTF-8，PowerShell 5.1 按系统编码解码，部分字节被误识别为引号 | 保留 `scripts/build-android-apk.ps1` 的 UTF-8 BOM；恢复 BOM 后语法解析和构建启动均通过。 |

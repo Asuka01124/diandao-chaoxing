@@ -1,7 +1,35 @@
 import { expect, test } from "bun:test";
-import { login } from "./auth";
+import { login, checkSession } from "./auth";
 import { courseCover, courses } from "./courses";
 import { RequestSession } from "./session";
+
+test("身份查询携带加密设备信息并保存 clientId", async () => {
+  let identityBody = "";
+  let identityMethod = "";
+  const session = await login(
+    "13800000000",
+    "password123",
+    "device",
+    async (url, init) => {
+      if (url.includes("/fanyalogin"))
+        return Response.json(
+          { status: true },
+          { headers: { "set-cookie": "sid=abc; Path=/; HttpOnly" } },
+        );
+      identityMethod = init.method ?? "GET";
+      identityBody = String(init.body ?? "");
+      return Response.json({ msg: { puid: 123, fid: 0, name: "测试用户", clientId: "client-blob" } });
+    },
+  );
+  expect(identityMethod).toBe("POST");
+  expect(new URLSearchParams(identityBody).get("data")).toBeTruthy();
+  expect(session.clientId).toBe("client-blob");
+
+  const renewed = await checkSession(session, async () =>
+    Response.json({ msg: { puid: 123, fid: 0, name: "测试用户" } }),
+  );
+  expect(renewed.clientId).toBe("client-blob");
+});
 
 test("登录 Cookie 跨学习通子域传递给身份查询", async () => {
   let identityCookie = "";

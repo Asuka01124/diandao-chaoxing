@@ -1,5 +1,6 @@
 import type { ProviderSession } from "@sign/shared";
 import { encryptLoginValue } from "./crypto";
+import { buildDeviceInfo, encryptDeviceInfo } from "./device";
 import { ProviderError } from "./errors";
 import { asObject, json, str } from "./response";
 import { RequestSession, type Transport } from "./session";
@@ -23,16 +24,29 @@ function loginBody(
 }
 async function identity(
   jar: RequestSession,
+  deviceCode?: string,
 ): Promise<{
   userId: string;
   fid: string;
   name: string;
   uid?: string;
   imEncryptedPassword?: string;
+  clientId?: string;
 }> {
-  const body = await json(
-    await jar.request("https://sso.chaoxing.com/apis/login/userLogin4Uname.do"),
-  );
+  const url = "https://sso.chaoxing.com/apis/login/userLogin4Uname.do";
+  let init: RequestInit = {};
+  if (deviceCode) {
+    try {
+      init = {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ data: encryptDeviceInfo(buildDeviceInfo(deviceCode)) }),
+      };
+    } catch {
+      init = {};
+    }
+  }
+  const body = await json(await jar.request(url, init));
   if (!body.msg || typeof body.msg !== "object")
     throw new ProviderError(
       "REAUTH_REQUIRED",
@@ -50,6 +64,8 @@ async function identity(
     uid: msg.uid === undefined ? undefined : str(msg.uid, "uid"),
     imEncryptedPassword:
       typeof im?.password === "string" ? im.password : undefined,
+    clientId:
+      typeof msg.clientId === "string" && msg.clientId ? msg.clientId : undefined,
   };
 }
 async function loginWithEncrypted(
@@ -87,7 +103,7 @@ async function loginWithEncrypted(
       "REAUTH_REQUIRED",
       "未能完成登录，请检查网络后重试",
     );
-  const user = await identity(jar);
+  const user = await identity(jar, deviceCode);
   return {
     identifier,
     encryptedPassword,
@@ -114,10 +130,10 @@ export async function checkSession(
 ): Promise<ProviderSession> {
   const jar = new RequestSession(session, transport);
   try {
-    const user = await identity(jar);
+    const user = await identity(jar, session.deviceCode);
     if (user.userId !== session.userId)
       throw new ProviderError("REAUTH_REQUIRED", "登录账号身份不匹配，请重新登录");
-    return { ...session, ...user, cookies: jar.exportCookies() };
+    return { ...session, ...user, clientId: user.clientId ?? session.clientId, cookies: jar.exportCookies() };
   } catch (error) {
     if (
       error instanceof ProviderError &&

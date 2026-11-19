@@ -8,6 +8,7 @@ import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { CourseCard } from '../../src/features/courses/course-card';
 import { courseKey, ongoingCourseActivities } from '../../src/features/courses/course-priority';
+import { PRACTICE_CLASS_ID, PRACTICE_COURSE_ID } from '../../src/features/courses/demo-course';
 import { OngoingAttendanceCard } from '../../src/features/courses/ongoing-attendance-card';
 import { useVault } from '../../src/state';
 import { AppScreen, FeedbackNotice, GroupedList, SectionTitle, type FeedbackTone } from '../../src/ui';
@@ -113,8 +114,9 @@ export default function CoursesScreen() {
   }
 
   if (!data || !account) return null;
-  const visibleCourses = courses;
-  const ongoing = ongoingCourseActivities(courses, data.activityCache, account.id, now);
+  const practiceCourse: Course = { id: PRACTICE_COURSE_ID, classId: PRACTICE_CLASS_ID, name: '签到演练', teacher: '本机模拟 · 不连接学习通' };
+  const visibleCourses = [...courses, practiceCourse];
+  const ongoing = ongoingCourseActivities(courses, data.activityCache, account.id, now).filter(entry => entry.activity.signed !== true);
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
     ? <GroupedList>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} index={index} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
@@ -143,8 +145,11 @@ export default function CoursesScreen() {
     {status && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
     <OngoingAttendanceCard entries={ongoing}
       onPress={activity => router.push({ pathname: '/activity/[id]', params: { id: activity.id, accountId: account.id } })}
-      onQuickSign={activity => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account.id } })} />
-    <SectionTitle meta={String(courses.length).padStart(2, '0')}>全部课程</SectionTitle>
+      onQuickSign={activity => router.push({
+        pathname: activity.kind === 'qr' ? '/activity/[id]' : '/prepare/[id]',
+        params: { id: activity.id, accountId: account.id },
+      })} />
+    <SectionTitle meta={String(visibleCourses.length).padStart(2, '0')}>全部课程</SectionTitle>
     {courseCards}
   </AppScreen>;
 }

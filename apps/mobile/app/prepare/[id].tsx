@@ -9,10 +9,12 @@ import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } f
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount, primaryAccount } from '../../src/features/accounts/account-role';
 import { GesturePatternPicker } from '../../src/features/courses/gesture-pattern-picker';
+import { isPracticeActivity } from '../../src/features/courses/demo-course';
+import { practiceQrPayload } from '../../src/features/courses/practice-server';
 import { prepareErrorMessage } from '../../src/features/courses/prepare-error';
 import { MapPicker } from '../../src/features/location/map-picker';
 import { photoName } from '../../src/features/photos/photo-name';
-import { AppScreen, FeedbackNotice, GlassInput, GroupedList, Message, PrimaryButton, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
+import { AppScreen, GlassInput, GroupedList, Message, PrimaryButton, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
 
 export default function PrepareScreen() {
   const { id, accountId, selectedIds, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; accountId?: string; selectedIds?: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
@@ -20,15 +22,18 @@ export default function PrepareScreen() {
   const [selectedAccountIds, setSelected] = useState<string[] | null>(() => selectedIds !== undefined ? selectedIds.split(',').filter(Boolean) : null);
   const selected = selectedAccountIds ?? data?.accounts.map(account => account.id) ?? [];
   const [location, setLocation] = useState<LocationInput | null>(null); const [mapOpen, setMapOpen] = useState(false);
-  const [code, setCode] = useState(''); const [gesture, setGesture] = useState(''); const [qr, setQr] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [code, setCode] = useState(''); const [gesture, setGesture] = useState(''); const [qr, setQr] = useState(''); const [busy, setBusy] = useState(false);
+  const [practiceScannedAt, setPracticeScannedAt] = useState<string | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [reservedPhotoId, setReservedPhotoId] = useState<string | null>(null);
   const [photoLabel, setPhotoLabel] = useState('');
   const notify = useFeedback();
   const theme = useTheme();
   useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
-  useEffect(() => { if (qrPayload) { setQr(qrPayload); setError(''); } }, [qrPayload]);
+  useEffect(() => { if (qrPayload) { setQr(qrPayload); setPracticeScannedAt(null); } }, [qrPayload]);
   if (!data || !activity) return null;
+  const effectiveQrPayload = practiceScannedAt ? practiceQrPayload(activity.id) : qrPayload;
+  const effectiveScannedAt = practiceScannedAt ?? scannedAt;
 
   function input(): SignInput {
     if (!activity) throw new Error('活动不存在');
@@ -44,8 +49,8 @@ export default function PrepareScreen() {
       return { kind: 'gesture', sequence: gesture, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'qr') {
-      if (!scannedAt || qr !== qrPayload) throw new Error('请先扫描当前活动的二维码');
-      return { kind: 'qr', qrPayload: qr, scannedAt, ...(location ? { location } : {}) };
+      if (!effectiveScannedAt || qr !== effectiveQrPayload) throw new Error('请先扫描当前活动的二维码');
+      return { kind: 'qr', qrPayload: qr, scannedAt: effectiveScannedAt, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'photo') return { kind: 'photo', mediaIdByAccount: {}, ...(location ? { location } : {}) };
     throw new Error('暂不支持此类签到，请在学习通中完成');
@@ -53,12 +58,12 @@ export default function PrepareScreen() {
 
   async function pickPhoto(camera: boolean) {
     const picked = camera ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.5 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 });
-    if (!picked.canceled) { setPhotoUri(picked.assets[0].uri); setReservedPhotoId(null); setPhotoLabel(camera ? '刚拍的照片' : '相册照片'); setError(''); notify('已选照片', 'success'); }
+    if (!picked.canceled) { setPhotoUri(picked.assets[0].uri); setReservedPhotoId(null); setPhotoLabel(camera ? '刚拍的照片' : '相册照片'); notify('已选照片', 'success'); }
     else notify('已取消', 'info');
   }
 
   async function start() {
-    setBusy(true); setError('');
+    setBusy(true);
     let stagedUri: string | undefined;
     try {
       if (!activity) throw new Error('活动不存在');
@@ -74,7 +79,7 @@ export default function PrepareScreen() {
       router.replace({ pathname: '/job/[id]', params: { id: job.id } });
       void runJob(store, job.id).catch(e => notify(e instanceof Error ? e.message : '签到失败，请查看结果', 'error'));
     }
-    catch (e) { if (stagedUri) clearStagedPhoto(stagedUri); setError(prepareErrorMessage(e, activity?.kind ?? 'unknown')); }
+    catch (e) { if (stagedUri) clearStagedPhoto(stagedUri); notify(prepareErrorMessage(e, activity?.kind ?? 'unknown'), 'error'); }
     finally { setBusy(false); }
   }
 
@@ -86,7 +91,6 @@ export default function PrepareScreen() {
   return <AppScreen title="准备签到" subtitle={activity.title} backLabel="返回" onBack={() => router.back()}
     headerAction={<YStack backgroundColor="$ongoingHeader" paddingHorizontal={10} paddingVertical={5} borderRadius={999}><Text color="$success" fontSize={12} fontWeight="500">进行中</Text></YStack>}
     footer={<YStack gap={8}>
-      {!!error && <FeedbackNotice message={error} tone="error" />}
       {!selected.length && <Message>请至少选择 1 个账号</Message>}
       <PrimaryButton onPress={() => { void start(); }} loading={busy} disabled={!selected.length || activity.kind === 'unknown'}>{`为 ${selected.length} 个账号签到`}</PrimaryButton>
     </YStack>}>
@@ -100,7 +104,7 @@ export default function PrepareScreen() {
         {!!data.settings.favoriteLocations.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 12, gap: 8 }}>
           {data.settings.favoriteLocations.map((item, index) => {
             const active = location?.latitude === item.latitude && location?.longitude === item.longitude && location?.address === item.address;
-            return <Pressable key={index} onPress={() => { setLocation(item); setError(''); notify('已选用常用位置', 'success'); }}
+            return <Pressable key={index} onPress={() => { setLocation(item); notify('已选用常用位置', 'success'); }}
               accessibilityRole="button" accessibilityLabel={`选用常用位置 ${item.address}`} accessibilityState={{ selected: active }}
               style={({ pressed }) => ({ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, backgroundColor: active ? theme.actionSurface.val : theme.soft.val, borderWidth: 1, borderColor: active ? theme.actionBorder.val : 'transparent', opacity: pressed ? 0.65 : 1 })}>
               <Text color={active ? '$actionText' : '$muted'} fontSize={12} fontWeight="500">{item.address}</Text>
@@ -109,17 +113,18 @@ export default function PrepareScreen() {
         </ScrollView>}
       </GroupedList>
     </>}
-    <MapPicker visible={mapOpen} initial={location} onClose={() => setMapOpen(false)} onPick={point => { setLocation(point); setError(''); notify('位置已选定', 'success'); }} />
+    <MapPicker visible={mapOpen} initial={location} onClose={() => setMapOpen(false)} onPick={point => { setLocation(point); notify('位置已选定', 'success'); }} />
 
     {activity.kind === 'code' && <><SectionTitle>签到码</SectionTitle>
-      <GroupedList><YStack padding={16}><GlassInput placeholder="4 至 12 位数字签到码" value={code} onChangeText={value => { setCode(value); setError(''); }} keyboardType="number-pad" /></YStack></GroupedList>
+      <GroupedList><YStack padding={16}><GlassInput placeholder="4 至 12 位数字签到码" value={code} onChangeText={setCode} keyboardType="number-pad" /></YStack></GroupedList>
     </>}
 
-    {activity.kind === 'gesture' && <><SectionTitle>手势签到</SectionTitle><GesturePatternPicker value={gesture} onChange={value => { setGesture(value); setError(''); }} /></>}
+    {activity.kind === 'gesture' && <><SectionTitle>手势签到</SectionTitle><GesturePatternPicker value={gesture} onChange={setGesture} /></>}
 
     {activity.kind === 'qr' && <><SectionTitle>二维码</SectionTitle>
       <GroupedList><YStack padding={16} gap={12}>
-        <Message>{scannedAt && qr === qrPayload ? `已于 ${new Date(scannedAt).toLocaleTimeString()} 扫描` : '请扫描当前活动的二维码'}</Message>
+        <Message>{effectiveScannedAt && qr === effectiveQrPayload ? `已于 ${new Date(effectiveScannedAt).toLocaleTimeString()} 扫描` : '请扫描当前活动的二维码'}</Message>
+        {isPracticeActivity(activity) && <PrimaryButton variant="secondary" onPress={() => { setQr(practiceQrPayload(activity.id)); setPracticeScannedAt(new Date().toISOString()); notify('已使用演练二维码', 'success'); }}>使用演练二维码</PrimaryButton>}
         <PrimaryButton variant="secondary" onPress={() => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } })}>扫描二维码</PrimaryButton>
       </YStack></GroupedList>
     </>}
@@ -138,7 +143,7 @@ export default function PrepareScreen() {
             const label = photoName(photo, index);
             return <Pressable key={photo.id} onPress={() => {
               if (!reservedPhotoExists(photo.id)) { notify('该照片文件已丢失，请重新添加', 'error'); return; }
-              setReservedPhotoId(photo.id); setPhotoUri(reservedPhotoUri(photo.id)); setPhotoLabel(label); setError(''); notify('已选预留照片', 'success');
+              setReservedPhotoId(photo.id); setPhotoUri(reservedPhotoUri(photo.id)); setPhotoLabel(label); notify('已选预留照片', 'success');
             }} accessibilityRole="button" accessibilityLabel={`使用预留照片 ${label}`} accessibilityState={{ selected: active }}
               style={({ pressed }) => ({ width: '31%', minWidth: 92, borderRadius: 14, padding: 8, backgroundColor: theme.soft.val, borderWidth: active ? 1.5 : 0, borderColor: active ? theme.color.val : 'transparent', opacity: pressed ? 0.65 : 1, gap: 6 })}>
               <Image source={{ uri: reservedPhotoUri(photo.id) }} resizeMode="cover" style={{ width: '100%', height: 54, borderRadius: 9 }} />
@@ -148,12 +153,12 @@ export default function PrepareScreen() {
         </XStack>
       </YStack></GroupedList>}
       <XStack gap={10}>
-        <YStack flex={1}><PrimaryButton variant="secondary" onPress={() => { void pickPhoto(true).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>拍照</PrimaryButton></YStack>
-        <YStack flex={1}><PrimaryButton variant="secondary" onPress={() => { void pickPhoto(false).catch(e => setError(prepareErrorMessage(e, 'photo'))); }}>从相册选择</PrimaryButton></YStack>
+        <YStack flex={1}><PrimaryButton variant="secondary" onPress={() => { void pickPhoto(true).catch(e => notify(prepareErrorMessage(e, 'photo'), 'error')); }}>拍照</PrimaryButton></YStack>
+        <YStack flex={1}><PrimaryButton variant="secondary" onPress={() => { void pickPhoto(false).catch(e => notify(prepareErrorMessage(e, 'photo'), 'error')); }}>从相册选择</PrimaryButton></YStack>
       </XStack>
     </YStack></>}
 
-    <SectionTitle action={<Pressable onPress={() => { setError(''); setSelected(allSelected && main ? [main.id] : allIds); }}
+    <SectionTitle action={<Pressable onPress={() => setSelected(allSelected && main ? [main.id] : allIds)}
       accessibilityRole="button" accessibilityLabel={allSelected ? '仅选自己' : '全选账号'} style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}>
       <Text color="$color" fontSize={12} fontWeight="500">{allSelected ? '仅选自己' : '全选'}</Text>
     </Pressable>}>{`签到账号 (${selected.length}/${data.accounts.length})`}</SectionTitle>
@@ -163,7 +168,7 @@ export default function PrepareScreen() {
         badge={a.role === 'primary' ? '我' : undefined}
         detail={a.state === 'REAUTH_REQUIRED' ? '需要重新登录' : undefined}
         last={index === data.accounts.length - 1}
-        onPress={() => { setError(''); setSelected(checked ? selected.filter(id => id !== a.id) : [...selected, a.id]); }}
+        onPress={() => setSelected(checked ? selected.filter(id => id !== a.id) : [...selected, a.id])}
         accessory={<YStack width={22} height={22} borderRadius={11} alignItems="center" justifyContent="center"
           backgroundColor={checked ? '$actionSurface' : 'transparent'} borderWidth={1.5} borderColor={checked ? '$actionBorder' : '$fieldBorder'}>
           {checked && <Text color="$actionText" fontSize={12} fontWeight="600">✓</Text>}

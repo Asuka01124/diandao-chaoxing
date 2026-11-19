@@ -35,6 +35,7 @@ test('照片 multipart 可被独立解析，字段、JPEG 原始字节和登录�
   expect(paths).toEqual(['/api/token/uservalid', '/upload']);
 });
 
+// 子进程冷启动加载 expo 模块接近默认 5 秒超时，单独放宽。
 test('手机 Blob 和 FormData 不支持文件封装时仍可完成照片上传', async () => {
   const modulePath = new URL('./media.ts', import.meta.url).href;
   const script = `
@@ -58,7 +59,7 @@ test('手机 Blob 和 FormData 不支持文件封装时仍可完成照片上传'
   const error = await new Response(probe.stderr).text();
   expect(await probe.exited, error).toBe(0);
   expect(JSON.parse(output)).toEqual({ mediaId: 'native-compatible' });
-});
+}, 20_000);
 
 test('错误格式或超过两兆的照片在网络请求前被拒绝', async () => {
   let requests = 0;

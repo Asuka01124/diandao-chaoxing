@@ -27,6 +27,7 @@ export const sessionSchema = z.object({
   deviceCode: z.string().min(1),
   uid: z.string().optional(),
   imEncryptedPassword: z.string().optional(),
+  clientId: z.string().optional(),
 });
 export type ProviderSession = z.infer<typeof sessionSchema>;
 
