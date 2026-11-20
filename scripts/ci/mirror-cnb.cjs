@@ -47,7 +47,8 @@ async function uploadApk(releaseId, apkName, apk) {
       });
       if (new URL(upload_url).protocol !== 'https:') throw new Error('Unexpected CNB upload protocol');
       const upload = await fetch(upload_url, {
-        method: 'PUT', body: apk, redirect: 'error', signal: AbortSignal.timeout(120_000),
+        // 跨境上传 41MB 实测可能超过 2 分钟，超时过短会连续重试失败。
+        method: 'PUT', body: apk, redirect: 'error', signal: AbortSignal.timeout(600_000),
         headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(apk.length) },
       });
       if (!upload.ok) throw new Error('CNB APK upload failed: HTTP ' + upload.status);
@@ -62,7 +63,7 @@ async function uploadApk(releaseId, apkName, apk) {
 
 async function publicApkMatches(url, size, expected) {
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(90_000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(300_000) });
     if (!response.ok) return false;
     const bytes = Buffer.from(await response.arrayBuffer());
     return bytes.length === size && sha256(bytes) === expected;
