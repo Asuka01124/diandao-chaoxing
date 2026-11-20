@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Text, XStack, YStack, useTheme } from 'tamagui';
@@ -7,7 +7,7 @@ import { ClientError } from '../../src/core/api';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { removeAccount, saveLogin, verifyAccount } from '../../src/features/accounts/account-service';
-import { ActionSheet, AppScreen, EmptyState, GlassInput, GroupedList, PrimaryButton, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
+import { ActionSheet, AppScreen, EmptyState, GlassInput, GroupedList, PrimaryButton, SettingsRow, useFeedback } from '../../src/ui';
 
 export default function AccountsScreen() {
   const store = useVault(); const data = store.data;
@@ -17,7 +17,6 @@ export default function AccountsScreen() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const notify = useFeedback();
   const theme = useTheme();
-  useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   if (!data || !hasPrimaryAccount(data)) return null;
 
   function openAddSheet() {
@@ -61,23 +60,22 @@ export default function AccountsScreen() {
   const delegates = data.accounts.filter(a => a.role === 'delegate');
   const target = delegates.find(a => a.id === selected);
 
+  const closeDialog = sheetOpen ? closeSheet : () => setSelected(null);
   return <AppScreen title="代签账号" headerAction={<Pressable onPress={openAddSheet} accessibilityRole="button" accessibilityLabel="添加代签账号"
-    style={({ pressed }) => ({ backgroundColor: theme.actionSurface.val, borderWidth: 1, borderColor: theme.actionBorder.val, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, opacity: pressed ? 0.72 : 1 })}>
-    <Text color="$actionText" fontSize={12} fontWeight="500">+ 添加</Text>
+    style={({ pressed }) => ({ backgroundColor: theme.panel.val, minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 999, opacity: pressed ? 0.72 : 1 })}>
+    <Text color="$color" fontSize={14} fontWeight="500">+ 添加</Text>
   </Pressable>}>
-    <SectionTitle meta={String(delegates.length).padStart(2, '0')}>已添加</SectionTitle>
     <GroupedList>{delegates.length ? delegates.map((account: Account, index: number) => {
       const expired = account.state === 'REAUTH_REQUIRED';
       return <SettingsRow key={account.id} title={account.label}
-        indexLabel={String(index + 1).padStart(2, '0')}
-        detail={expired ? '需要重新登录' : account.session.identifier}
+        detail={delegates.some(other => other.id !== account.id && other.label === account.label) ? account.session.identifier : undefined}
         last={index === delegates.length - 1}
         onPress={() => setSelected(account.id)}
-        accessory={<Text color={expired ? '$danger' : '$muted'} fontSize={12} fontWeight="500">{expired ? '重登 ›' : '管理 ›'}</Text>} />;
-    }) : <EmptyState title="暂无代签账号" detail="点击右上角「+ 添加」录入同学账号" />}</GroupedList>
+        accessory={expired ? <Text color="$danger" fontSize={14}>需重登</Text> : undefined} />;
+    }) : <EmptyState title="暂无代签账号" />}</GroupedList>
 
-    <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={closeSheet}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
+    <Modal visible={sheetOpen || !!target} transparent animationType="fade" onRequestClose={closeDialog}>
+      {sheetOpen ? <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
         <Pressable onPress={closeSheet} accessibilityLabel="关闭添加账号窗口" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: theme.overlay.val }} />
         <ScrollView keyboardShouldPersistTaps="handled"
           style={{ width: '100%', maxWidth: 340, alignSelf: 'center', flexGrow: 0, backgroundColor: theme.panel.val, borderRadius: 24 }}
@@ -86,7 +84,7 @@ export default function AccountsScreen() {
             <Text color="$color" fontSize={18} fontWeight="500">{reauthId ? '重新登录' : '添加代签账号'}</Text>
             <Pressable onPress={closeSheet} accessibilityRole="button" accessibilityLabel="取消"
               style={({ pressed }) => ({ backgroundColor: theme.soft.val, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999, opacity: pressed ? 0.65 : 1 })}>
-              <Text color="$muted" fontSize={12} fontWeight="500">取消</Text>
+              <Text color="$muted" fontSize={14} fontWeight="500">取消</Text>
             </Pressable>
           </XStack>
           <GlassInput placeholder="备注名（可选）" value={label} onChangeText={setLabel} accessibilityLabel="备注名" />
@@ -94,13 +92,11 @@ export default function AccountsScreen() {
           <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="密码" />
           <YStack marginTop={4}><PrimaryButton loading={busy} disabled={!!checkingId} onPress={() => { void add(); }}>{reauthId ? '重新登录' : '保存账号'}</PrimaryButton></YStack>
         </ScrollView>
-      </KeyboardAvoidingView>
-    </Modal>
-
-    <ActionSheet visible={!!target} title={target?.label ?? ''} subtitle={target?.session.identifier} onClose={() => setSelected(null)} actions={target ? [
+      </KeyboardAvoidingView> : <ActionSheet embedded visible={!!target} title={target?.label ?? ''} subtitle={target?.session.identifier} onClose={() => setSelected(null)} actions={target ? [
       { label: checkingId === target.id ? '正在检查…' : '检查登录状态', onPress: () => { void check(target.id); } },
       { label: '重新登录', onPress: () => { setReauthId(target.id); setIdentifier(target.session.identifier); setLabel(target.label); setPassword(''); setSheetOpen(true); } },
       { label: '删除账号', danger: true, onPress: () => { void remove(target.id); } },
-    ] : []} />
+    ] : []} />}
+    </Modal>
   </AppScreen>;
 }

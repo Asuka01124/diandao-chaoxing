@@ -19,12 +19,11 @@ export default function LoginScreen() {
   useEffect(() => {
     const data = store.data;
     if (!store.ready || !hasPrimaryAccount(data)) { resumed.current = false; return; }
-    if (!resumed.current) {
-      resumed.current = true;
-      for (const job of data!.jobs) {
-        if (job.state === 'RUNNING') void runJob(store, job.id);
-        else if (job.state === 'DONE') void cleanupCompletedPhoto(store, job.id).catch(() => {});
-      }
+    if (resumed.current) return;
+    resumed.current = true;
+    for (const job of data!.jobs) {
+      if (job.state === 'RUNNING') void runJob(store, job.id);
+      else if (job.state === 'DONE') void cleanupCompletedPhoto(store, job.id).catch(() => {});
     }
     router.replace('/(tabs)/courses');
   }, [store.ready, store.data?.accounts]);
@@ -34,22 +33,21 @@ export default function LoginScreen() {
     setReloading(true); notify('正在重新读取…', 'loading');
     void store.reload().then(() => notify('已重新读取', 'success')).catch(e => notify(e instanceof Error ? e.message : '读取失败', 'error')).finally(() => setReloading(false));
   }}>重试</PrimaryButton></YStack></AppScreen>;
-  if (hasPrimaryAccount(store.data)) return null;
+  if (hasPrimaryAccount(store.data)) return <AppScreen title="我的课程">{null}</AppScreen>;
 
   async function submit() {
     if (!identifier.trim() || !password) { setError('请输入学习通账号和密码'); return; }
     setBusy(true); setError('');
-    try { await saveLogin(store, identifier, password, { role: 'primary' }); setPassword(''); notify('登录成功', 'success'); router.replace('/(tabs)/courses'); }
+    try { await saveLogin(store, identifier, password, { role: 'primary' }); setPassword(''); }
     catch (e) { setError(e instanceof Error ? e.message : '登录失败，请稍后再试'); }
     finally { setBusy(false); }
   }
-  return <AppScreen title="登录学习通" subtitle="账号资料加密保存在本机">
-    <YStack backgroundColor="$panel" borderRadius="$radius.panel" padding={20} gap={14}
-      shadowColor="#000000" shadowOpacity={0.04} shadowRadius={14} shadowOffset={{ width: 0, height: 4 }} elevation={2}>
-      <Text color="$muted" fontSize={12} fontWeight="500">学习通账号</Text>
+  return <AppScreen title="登录学习通" keyboardAware>
+    <YStack marginTop={20} gap={12}>
+      <Text color="$muted" fontSize={15} fontWeight="500">账号</Text>
       <GlassInput placeholder="手机号 / 学号" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} accessibilityLabel="学习通账号" />
-      <Text color="$muted" fontSize={12} fontWeight="500">密码</Text>
-      <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" />
+      <Text color="$muted" fontSize={15} fontWeight="500">密码</Text>
+      <GlassInput value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="学习通密码" />
       {!!error && <FeedbackNotice message={error} tone="error" />}
       <YStack marginTop={4}><PrimaryButton loading={busy} onPress={() => { void submit(); }}>{busy ? '正在登录…' : '登录'}</PrimaryButton></YStack>
     </YStack>

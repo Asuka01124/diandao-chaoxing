@@ -15,7 +15,7 @@ export function ReservedPhotoRow({ photo, index, last, selected, detail, onSelec
       style={{ width: 58, height: 58, borderRadius: 10 }} />
     <YStack flex={1} gap={3}>
       <Text color="$color" fontSize={15} fontWeight="600" numberOfLines={2}>{title}</Text>
-      <Text color="$muted" fontSize={12}>{detail ?? `保存于 ${new Date(photo.createdAt).toLocaleDateString('zh-CN')}`}</Text>
+      {!!detail && <Text color="$muted" fontSize={14}>{detail}</Text>}
     </YStack>
     {onSelect ? <Text color={selected ? '$brand' : '$muted'} fontSize={21}>{selected ? '✓' : '›'}</Text> : null}
   </XStack>;

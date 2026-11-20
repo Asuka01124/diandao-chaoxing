@@ -10,18 +10,17 @@ import { checkCachedUpdates } from './update-checker';
 
 const sourceNames = { cnb: 'CNB 国内源', github: 'GitHub' };
 
-function AboutRow({ kind, indexLabel, title, detail, action, busy, last, onPress }: {
-  kind: 'update' | 'repo'; indexLabel: string; title: string; detail: string; action?: string; busy?: boolean; last?: boolean; onPress: () => void;
+function AboutRow({ kind, title, detail, action, busy, onPress }: {
+  kind: 'update' | 'repo'; title: string; detail?: string; action?: string; busy?: boolean; onPress: () => void;
 }) {
   const theme = useTheme();
-  return <Pressable onPress={onPress} disabled={busy} accessibilityRole="button" accessibilityLabel={`${title}，${detail}${action ? `，${action}` : ''}`}
-    accessibilityState={{ disabled: !!busy, busy: !!busy }} style={({ pressed }) => ({ backgroundColor: pressed ? theme.soft.val : theme.panel.val })}>
-    <XStack minHeight={66} paddingHorizontal={17} paddingVertical={13} alignItems="center" gap={13}
-      borderBottomWidth={last ? 0 : 0.7} borderColor="$separator">
-      <Text width={22} fontSize={12} color="$muted" fontWeight="500">{indexLabel}</Text>
-      <YStack flex={1} gap={3}><Text color="$color" fontSize={15} lineHeight={21} fontWeight="500">{title}</Text><Text color="$muted" fontSize={12} lineHeight={18}>{detail}</Text></YStack>
+  return <Pressable onPress={onPress} disabled={busy} accessibilityRole="button" accessibilityLabel={`${title}${detail ? `，${detail}` : ''}${action ? `，${action}` : ''}`}
+    accessibilityState={{ disabled: !!busy, busy: !!busy }} style={({ pressed }) => ({ backgroundColor: pressed ? theme.soft.val : 'transparent' })}>
+    <XStack minHeight={58} paddingLeft={7} paddingVertical={8} alignItems="center" gap={14}>
+      <YStack width={6} height={6} borderRadius={3} backgroundColor="$idleDot" />
+      <YStack flex={1} gap={3}><Text color="$color" fontSize={15} lineHeight={21} fontWeight="500">{title}</Text>{!!detail && <Text color="$muted" fontSize={14} lineHeight={20}>{detail}</Text>}</YStack>
       {busy ? <ActivityIndicator size="small" color={theme.muted.val} /> : <>
-        {!!action && <Text color="$muted" fontSize={12} lineHeight={18}>{action}</Text>}
+        {!!action && <Text color="$muted" fontSize={14} lineHeight={18}>{action}</Text>}
         <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <Path d={kind === 'repo' ? 'M7 17 17 7M7 7h10v10' : 'm9 5 7 7-7 7'} stroke={theme.muted.val} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
@@ -93,11 +92,11 @@ export function AboutAppSection() {
   return <>
     <SectionTitle>关于</SectionTitle>
     <GroupedList>
-      <AboutRow kind="update" indexLabel="01" title="检查更新" detail={`v${current.version}`} busy={checking}
+      <AboutRow kind="update" title="检查更新" detail={`v${current.version}`} busy={checking}
         action={Platform.OS === 'ios' ? '查看' : release ? '发现新版本' : failed ? '重试' : undefined} onPress={() => { void check(); }} />
-      <AboutRow kind="repo" indexLabel="02" title="项目主页" detail="Asuka01124/diandao-chaoxing" last onPress={() => { void openLink(repositoryUrl); }} />
+      <AboutRow kind="repo" title="项目主页" onPress={() => { void openLink(repositoryUrl); }} />
     </GroupedList>
-    <Text color={failed ? '$danger' : '$muted'} fontSize={12} lineHeight={18} marginTop={8} marginLeft={4} minHeight={18} accessibilityLiveRegion="polite">{message}</Text>
+    {!!message && <Text color={failed ? '$danger' : '$muted'} fontSize={14} lineHeight={18} marginTop={8} marginLeft={4} minHeight={18} accessibilityLiveRegion="polite">{message}</Text>}
     <Modal visible={dialogOpen} transparent animationType="none" onRequestClose={() => setDialogOpen(false)}>
       <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
         <Pressable onPress={() => setDialogOpen(false)} accessibilityLabel="关闭版本更新" style={{ position: 'absolute', inset: 0, backgroundColor: theme.overlay.val }} />
@@ -105,21 +104,21 @@ export function AboutAppSection() {
           padding={22} maxHeight={height * 0.85} gap={14} accessibilityViewIsModal>
           <ScrollView style={{ flexShrink: 1, maxHeight: Math.max(96, height * 0.55) }}>
             <Text color="$color" fontSize={22} lineHeight={30} fontWeight="500" accessibilityRole="header" marginBottom={6}>发现新版本</Text>
-            <Text color="$muted" fontSize={13} lineHeight={20} marginBottom={18}>v{current.version} → {release?.tag}</Text>
-            <Text color="$color" fontSize={13} lineHeight={20} fontWeight="500" marginBottom={6}>更新内容</Text>
-            <Text color="$muted" fontSize={13} lineHeight={21}>{release?.notes}</Text>
+            <Text color="$muted" fontSize={14} lineHeight={20} marginBottom={18}>v{current.version} → {release?.tag}</Text>
+            <Text color="$color" fontSize={14} lineHeight={20} fontWeight="500" marginBottom={6}>更新内容</Text>
+            <Text color="$muted" fontSize={14} lineHeight={21}>{release?.notes}</Text>
           </ScrollView>
-          {!!downloadError && <Text color="$danger" fontSize={12} lineHeight={18} accessibilityRole="alert">{downloadError}</Text>}
-          <Button minHeight={52} borderRadius={18} backgroundColor="$actionSurface" color="$actionText" borderWidth={1} borderColor="$actionBorder" fontSize={15} fontWeight="500"
+          {!!downloadError && <Text color="$danger" fontSize={14} lineHeight={18} accessibilityRole="alert">{downloadError}</Text>}
+          <Button minHeight={52} borderRadius={18} backgroundColor="$actionSurface" color="$actionText" borderWidth={0} fontSize={15} fontWeight="500"
             disabled={!!opening} accessibilityState={{ disabled: !!opening, busy: opening === release?.source }} pressStyle={{ backgroundColor: '$actionSurface', borderColor: '$actionBorder', opacity: 0.8 }} onPress={() => { if (release) void download(release.source); }}>
             {release && opening === release.source ? '正在打开…' : release ? `前往下载（${sourceNames[release.source]}）` : '前往下载'}
           </Button>
-          <Button minHeight={44} borderRadius={14} backgroundColor="$soft" color="$color" fontSize={13} fontWeight="500"
+          <Button minHeight={44} borderRadius={14} backgroundColor="$soft" color="$color" fontSize={14} fontWeight="500"
             disabled={!!opening} accessibilityState={{ disabled: !!opening, busy: opening === alternateSource }} pressStyle={{ opacity: 0.72 }} onPress={() => { void download(alternateSource); }}>
             {opening === alternateSource ? '正在打开…' : `换用 ${sourceNames[alternateSource]} 下载`}
           </Button>
           <Pressable onPress={() => setDialogOpen(false)} accessibilityRole="button" accessibilityLabel="稍后再说" style={({ pressed }) => ({ minHeight: 42, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}>
-            <Text color="$muted" fontSize={13}>稍后再说</Text>
+            <Text color="$muted" fontSize={14}>稍后再说</Text>
           </Pressable>
         </YStack>
       </View>

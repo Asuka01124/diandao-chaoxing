@@ -12,9 +12,7 @@ export function StatusBadge({ state }: { state: AttemptState }) {
   const isOk = state === 'SUCCESS' || state === 'ALREADY_SIGNED';
   const isWarn = state === 'FAILED' || state === 'REAUTH_REQUIRED' || state.startsWith('WAITING_');
   const tone = isOk ? '$success' : isWarn ? '$danger' : '$muted';
-  return <YStack backgroundColor={isWarn && !isOk ? '$dangerSoft' : '$soft'} borderRadius={8} paddingHorizontal={10} paddingVertical={4}>
-    <Text fontSize={12} fontWeight="500" color={tone}>{labels[state]}</Text>
-  </YStack>;
+  return <Text fontSize={14} color={tone}>{labels[state]}</Text>;
 }
 
 export function AccountAvatar({ name }: { name: string }) {

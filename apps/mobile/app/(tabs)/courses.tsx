@@ -50,7 +50,6 @@ export default function CoursesScreen() {
     return () => { clearInterval(timer); listener.remove(); };
   }, []);
 
-  useEffect(() => { if (store.ready && !primaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   useEffect(() => { if (account) void loadCourses(account); }, [account?.id]);
 
   async function loadCourses(current: Account, manual = false) {
@@ -114,42 +113,43 @@ export default function CoursesScreen() {
   }
 
   if (!data || !account) return null;
-  const practiceCourse: Course = { id: PRACTICE_COURSE_ID, classId: PRACTICE_CLASS_ID, name: '签到演练', teacher: '本机模拟 · 不连接学习通' };
+  const practiceCourse: Course = { id: PRACTICE_COURSE_ID, classId: PRACTICE_CLASS_ID, name: '签到演练' };
   const visibleCourses = [...courses, practiceCourse];
+  const nameCounts = new Map<string, number>();
+  for (const course of visibleCourses) nameCounts.set(course.name, (nameCounts.get(course.name) ?? 0) + 1);
   const ongoing = ongoingCourseActivities(courses, data.activityCache, account.id, now).filter(entry => entry.activity.signed !== true);
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
-    ? <GroupedList>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} index={index} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
+    ? <GroupedList>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} showTeacher={(nameCounts.get(course.name) ?? 0) > 1} index={index} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
     : <YStack gap={12}>{Array.from({ length: Math.ceil(visibleCourses.length / 2) }, (_, rowIndex) => {
       const pair = visibleCourses.slice(rowIndex * 2, rowIndex * 2 + 2);
       return <XStack key={pair[0].id + '-' + pair[0].classId} gap={12}>
-        {pair.map((course, colIndex) => <YStack key={`${course.id}-${course.classId}`} flex={1}><CourseCard course={course} index={rowIndex * 2 + colIndex} session={account.session} layout="grid" onPress={() => openCourse(course)} /></YStack>)}
+        {pair.map((course, colIndex) => <YStack key={`${course.id}-${course.classId}`} flex={1}><CourseCard course={course} showTeacher={(nameCounts.get(course.name) ?? 0) > 1} index={rowIndex * 2 + colIndex} session={account.session} layout="grid" onPress={() => openCourse(course)} /></YStack>)}
         {pair.length === 1 && <YStack flex={1} />}
       </XStack>;
     })}</YStack>;
 
   const headerControls = <XStack alignItems="center" gap={8}>
-    <XStack backgroundColor="$panel" borderRadius={14} padding={4} gap={2} shadowColor="#000000" shadowOpacity={0.04} shadowRadius={12} shadowOffset={{ width: 0, height: 4 }} elevation={2}>
-      {(['list', 'grid'] as const).map(option => <Pressable key={option} accessibilityRole="button" accessibilityLabel={option === 'list' ? '列表显示课程' : '网格显示课程'} accessibilityState={{ selected: layout === option }}
-        onPress={() => setLayout(option)} style={({ pressed }) => ({ width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: layout === option ? theme.soft.val : 'transparent', opacity: pressed ? 0.6 : 1 })}>
-        <LayoutIcon layout={option} color={layout === option ? theme.color.val : theme.muted.val} />
-      </Pressable>)}
-    </XStack>
+    <Pressable accessibilityRole="button" accessibilityLabel={layout === 'list' ? '切换为课程网格' : '切换为课程列表'}
+      onPress={() => setLayout(layout === 'list' ? 'grid' : 'list')}
+      style={({ pressed }) => ({ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}>
+      <LayoutIcon layout={layout === 'list' ? 'grid' : 'list'} color={theme.muted.val} />
+    </Pressable>
     <Pressable accessibilityRole="button" accessibilityLabel={busy ? '正在刷新课程' : '刷新课程'} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void loadCourses(account, true); }}
-      style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.panel.val, opacity: busy ? 0.65 : pressed ? 0.6 : 1, shadowColor: '#000000', shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 })}>
+      style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.panel.val, opacity: pressed ? 0.6 : 1 })}>
       {busy ? <ActivityIndicator size="small" color={theme.brand.val} /> : <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Path d="M20 11a8 8 0 1 1-2.5-5.8M20 4v6h-6" stroke={theme.muted.val} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
     </Pressable>
   </XStack>;
 
   return <AppScreen title="我的课程" headerAction={headerControls}>
-    {status && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
+    {status && status.tone !== 'loading' && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
+    <SectionTitle meta={status?.tone === 'loading' ? status.message : undefined}>全部课程</SectionTitle>
+    {courseCards}
     <OngoingAttendanceCard entries={ongoing}
       onPress={activity => router.push({ pathname: '/activity/[id]', params: { id: activity.id, accountId: account.id } })}
       onQuickSign={activity => router.push({
         pathname: activity.kind === 'qr' ? '/activity/[id]' : '/prepare/[id]',
         params: { id: activity.id, accountId: account.id },
       })} />
-    <SectionTitle meta={String(visibleCourses.length).padStart(2, '0')}>全部课程</SectionTitle>
-    {courseCards}
   </AppScreen>;
 }

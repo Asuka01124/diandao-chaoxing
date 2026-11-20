@@ -29,7 +29,7 @@ mock.module('./api', () => ({
     upload: async (s: ProviderSession) => { providerCalls.push('upload'); return behavior.upload(s.userId); },
   },
 }));
-const { createJob, runJob, cleanupCompletedPhoto, replaceQrAndResume, provideFaceAndResume, retryAttempt, checkChallenge } = await import('./jobs');
+const { createJob, runJob, isJobRunning, subscribeJobRunner, cleanupCompletedPhoto, replaceQrAndResume, provideFaceAndResume, retryAttempt, checkChallenge } = await import('./jobs');
 
 const activity: Activity = { id: 'act', courseId: 'course', classId: 'class', source: 'course', title: '测试签到', kind: 'click', startTime: null, endTime: null, signed: null, ext: '{}' };
 const legacyActivities = (): Activity[] => (['click', 'location', 'photo', 'qr', 'code', 'gesture'] as const)
@@ -259,4 +259,19 @@ test('上传失败的临时照片固定保留 24 小时，到期清理且预留�
   expect(state.get().jobs[0].photoUri).toBeUndefined();
   expect(state.get().settings.reservedPhotos).toEqual([reserved]);
   await expect(retryAttempt(state, job.id, 'a')).rejects.toThrow('临时照片已清理');
+});
+
+test('结果页区分正在执行和需要恢复的任务', async () => {
+  const state = store();
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  expect(isJobRunning(job.id)).toBe(false);
+  const changes: boolean[] = [];
+  const unsubscribe = subscribeJobRunner(() => changes.push(isJobRunning(job.id)));
+  try {
+    behavior.prepare = async () => ({ state: 'WAITING_FACE' });
+    await runJob(state, job.id);
+    expect(changes).toEqual([true, false]);
+    expect(state.get().jobs[0].state).toBe('WAITING');
+    expect(state.get().attempts[0].state).toBe('WAITING_FACE');
+  } finally { unsubscribe(); }
 });

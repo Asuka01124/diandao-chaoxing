@@ -102,10 +102,19 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
   return 'continue';
 }
 const running = new Set<string>();
+const runnerListeners = new Set<() => void>();
+export function subscribeJobRunner(listener: () => void) {
+  runnerListeners.add(listener);
+  return () => { runnerListeners.delete(listener); };
+}
+export function isJobRunning(jobId: string) { return running.has(jobId); }
+function notifyRunnerListeners() { for (const listener of runnerListeners) listener(); }
+
 export async function runJob(store: VaultAccess, jobId: string): Promise<void> {
   if (running.has(jobId)) return;
   running.add(jobId);
   try {
+    notifyRunnerListeners();
     const job = store.get().jobs.find(j => j.id === jobId); if (!job) return;
     await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'RUNNING'; });
     for (const accountId of job.accountIds) {
@@ -120,7 +129,7 @@ export async function runJob(store: VaultAccess, jobId: string): Promise<void> {
       if (item) item.state = data.attempts.some(a => a.jobId === jobId && a.state.startsWith('WAITING_')) ? 'WAITING' : 'DONE';
     });
     await cleanupCompletedPhoto(store, jobId).catch(() => {});
-  } finally { running.delete(jobId); }
+  } finally { running.delete(jobId); notifyRunnerListeners(); }
 }
 export async function cleanupCompletedPhoto(store: VaultAccess, jobId: string): Promise<void> {
   const job = store.get().jobs.find(j => j.id === jobId);

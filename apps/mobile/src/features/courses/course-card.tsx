@@ -30,13 +30,12 @@ export function CourseIcon({ name, color, surface, size = 38 }: { name: string; 
   </Svg>;
 }
 
-export function CourseCard({ course, session, onPress, layout = 'list', index, last = false }: {
-  course: Course; session: ProviderSession; onPress: () => void; layout?: 'list' | 'grid'; index?: number; last?: boolean;
+export function CourseCard({ course, session, onPress, layout = 'list', showTeacher = true }: {
+  course: Course; session: ProviderSession; onPress: () => void; layout?: 'list' | 'grid'; index?: number; last?: boolean; showTeacher?: boolean;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const theme = useTheme();
-  const indexText = index !== undefined ? String(index + 1).padStart(2, '0') : undefined;
   useEffect(() => {
     if (layout !== 'grid') return;
     let active = true;
@@ -45,19 +44,18 @@ export function CourseCard({ course, session, onPress, layout = 'list', index, l
     return () => { active = false; };
   }, [course.imageUrl, session.userId, layout]);
 
-  if (layout === 'grid') return <YStack flex={1} minHeight={184} backgroundColor="$panel" borderRadius={20} shadowColor="#000000" shadowOpacity={0.04} shadowRadius={14} shadowOffset={{ width: 0, height: 4 }} elevation={2}>
+  if (layout === 'grid') return <YStack flex={1} minHeight={164}>
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`}
-      style={{ flex: 1, borderRadius: 20, overflow: 'hidden', backgroundColor: theme.panel.val }}>
+      style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>
       {({ pressed }) => <>
         {imageUri && !imageFailed
           ? <Image source={{ uri: imageUri }} resizeMode="cover" style={{ width: '100%', height: 106, backgroundColor: theme.soft.val }} onError={() => setImageFailed(true)} />
           : <YStack width="100%" height={106} backgroundColor="$soft" alignItems="center" justifyContent="center">
             <CourseIcon name={course.name} color={theme.muted.val} surface={theme.soft.val} size={42} />
-            {!!indexText && <Text position="absolute" top={10} left={12} fontSize={12} color="$muted" opacity={0.75}>{indexText}</Text>}
           </YStack>}
-        <YStack paddingHorizontal={14} paddingTop={12} paddingBottom={14} gap={4}>
+        <YStack paddingHorizontal={2} paddingTop={8} paddingBottom={10} gap={4}>
           <Text fontSize={14} lineHeight={20} fontWeight="500" color="$color" numberOfLines={2}>{course.name}</Text>
-          {!!course.teacher && <Text fontSize={12} color="$muted" numberOfLines={1}>{course.teacher}</Text>}
+          {showTeacher && !!course.teacher && <Text fontSize={14} color="$muted" numberOfLines={1}>{course.teacher}</Text>}
         </YStack>
         <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={[StyleSheet.absoluteFill, { backgroundColor: theme.color.val, opacity: pressed ? 0.05 : 0 }]} />
@@ -66,13 +64,12 @@ export function CourseCard({ course, session, onPress, layout = 'list', index, l
   </YStack>;
 
   return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`查看 ${course.name} 的签到活动`} style={({ pressed }) => ({ opacity: pressed ? 0.62 : 1 })}>
-    <XStack minHeight={78} alignItems="center" marginHorizontal={16} paddingVertical={14} borderBottomWidth={last ? 0 : 1} borderColor="$separator" gap={15}>
-      <CourseIcon name={course.name} color={theme.muted.val} surface={theme.panel.val} size={36} />
+    <XStack minHeight={58} alignItems="center" paddingLeft={7} paddingVertical={8} gap={14}>
+      <YStack width={6} height={6} borderRadius={3} backgroundColor="$idleDot" />
       <YStack flex={1} gap={3}>
-        <Text fontSize={16} lineHeight={22} fontWeight="500" color="$color" numberOfLines={2}>{course.name}</Text>
-        {!!course.teacher && <Text fontSize={12} lineHeight={18} color="$muted" numberOfLines={1}>{course.teacher}</Text>}
+        <Text fontSize={16} lineHeight={22} fontWeight="400" color="$color" numberOfLines={2}>{course.name}</Text>
+        {showTeacher && !!course.teacher && <Text fontSize={14} lineHeight={20} color="$muted" numberOfLines={1}>{course.teacher}</Text>}
       </YStack>
-      <Text color="$muted" fontSize={22} fontWeight="300">›</Text>
     </XStack>
   </Pressable>;
 }

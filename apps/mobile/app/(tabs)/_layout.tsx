@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { Redirect } from 'expo-router';
 import { View, useWindowDimensions, type ColorValue } from 'react-native';
 import TopTabs, { MaterialTopTabBar } from 'expo-router/js-top-tabs';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'tamagui';
-import { SlidingTabIndicator, type SlidingTabIndicatorProps } from '../../src/ui/tab-indicator';
+import { useVault } from '../../src/state';
+import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
+import { TabSafeAreaContext } from '../../src/ui/layout';
 
 const tabNames = ['courses', 'accounts', 'jobs', 'settings'] as const;
 const tabIcon = (name: typeof tabNames[number]) => ({ color }: { color: ColorValue }) => <TabIcon name={name} color={String(color)} />;
@@ -20,22 +22,26 @@ function TabIcon({ name, color }: { name: typeof tabNames[number]; color: string
 export default function TabsLayout() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const [swiping, setSwiping] = useState(false);
+  const { data, ready } = useVault();
+  if (!ready) return <View style={{ flex: 1, backgroundColor: theme.background.val }} />;
+  if (!hasPrimaryAccount(data)) return <Redirect href="/" />;
 
-  return <TopTabs initialRouteName="courses" tabBarPosition="bottom" initialLayout={{ width }} overScrollMode="never" keyboardDismissMode="on-drag"
-    screenListeners={{ swipeStart: () => setSwiping(true), swipeEnd: () => setSwiping(false) }}
-    tabBar={(props: Parameters<typeof MaterialTopTabBar>[0]) => <View style={{ overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: theme.panel.val, paddingHorizontal: 12, paddingTop: 10, paddingBottom: insets.bottom + 8, shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: -4 }, elevation: 8 }}>
-      <MaterialTopTabBar {...props} />
-    </View>}
-    screenOptions={{ swipeEnabled: true, animationEnabled: false, lazy: false, tabBarShowIcon: true,
-      tabBarIndicator: (props: Omit<SlidingTabIndicatorProps, 'swiping'>) => <SlidingTabIndicator {...props} swiping={swiping} />,
-      tabBarActiveTintColor: theme.color.val, tabBarInactiveTintColor: theme.muted.val, tabBarPressColor: 'transparent', tabBarPressOpacity: 1,
-      tabBarIndicatorStyle: { height: 68, borderRadius: 19, marginHorizontal: 6, backgroundColor: theme.soft.val }, tabBarLabelStyle: { fontSize: 12, fontWeight: '500', letterSpacing: 0.2 },
-      tabBarItemStyle: { height: 68 }, tabBarStyle: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 } }}>
-    <TopTabs.Screen name="courses" options={{ title: '课程', tabBarIcon: tabIcon('courses') }} />
-    <TopTabs.Screen name="accounts" options={{ title: '代签', tabBarIcon: tabIcon('accounts') }} />
-    <TopTabs.Screen name="jobs" options={{ title: '任务', tabBarIcon: tabIcon('jobs') }} />
-    <TopTabs.Screen name="settings" options={{ title: '设置', tabBarIcon: tabIcon('settings') }} />
-  </TopTabs>;
+  return <SafeAreaView style={{ flex: 1, backgroundColor: theme.background.val }}>
+    <TabSafeAreaContext.Provider value={true}>
+      <TopTabs initialRouteName="courses" tabBarPosition="bottom" initialLayout={{ width }} overScrollMode="never" keyboardDismissMode="on-drag"
+        tabBar={(props: Parameters<typeof MaterialTopTabBar>[0]) => <View style={{ alignSelf: 'center', width: '100%', maxWidth: 680, backgroundColor: theme.background.val, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6 }}>
+          <MaterialTopTabBar {...props} />
+        </View>}
+        screenOptions={{ swipeEnabled: true, animationEnabled: false, lazy: false, lazyPreloadDistance: tabNames.length - 1, tabBarShowIcon: true,
+          sceneStyle: { backgroundColor: theme.background.val },
+          tabBarActiveTintColor: theme.actionText.val, tabBarInactiveTintColor: theme.muted.val, tabBarPressColor: 'transparent', tabBarPressOpacity: 1,
+          tabBarIndicatorStyle: { height: 54, borderRadius: 27, backgroundColor: theme.actionSurface.val }, tabBarLabelStyle: { fontSize: 14, fontWeight: '500', letterSpacing: 0.2 },
+          tabBarItemStyle: { height: 54 }, tabBarStyle: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 } }}>
+        <TopTabs.Screen name="courses" options={{ title: '课程', tabBarIcon: tabIcon('courses') }} />
+        <TopTabs.Screen name="accounts" options={{ title: '代签', tabBarIcon: tabIcon('accounts') }} />
+        <TopTabs.Screen name="jobs" options={{ title: '任务', tabBarIcon: tabIcon('jobs') }} />
+        <TopTabs.Screen name="settings" options={{ title: '设置', tabBarIcon: tabIcon('settings') }} />
+      </TopTabs>
+    </TabSafeAreaContext.Provider>
+  </SafeAreaView>;
 }

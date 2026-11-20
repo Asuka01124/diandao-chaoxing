@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, Platform, Pressable, View } from 'react-native';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Linking, Modal, Platform, Pressable, View } from 'react-native';
 import Constants from 'expo-constants';
 import { ExpoGaodeMapModule, MapView, Marker, reGeocode, type MapViewRef } from 'expo-gaode-map';
 import { Text, XStack, YStack } from 'tamagui';
@@ -19,7 +19,7 @@ async function getLocationWithTimeout() {
   } finally { if (timer) clearTimeout(timer); }
 }
 
-export function MapPicker({ visible, initial, onClose, onPick }: { visible: boolean; initial?: LocationInput | null; onClose: () => void; onPick: (location: LocationInput) => void }) {
+export function MapPicker({ visible, initial, onClose, onPick, embedded = false }: { visible: boolean; embedded?: boolean; initial?: LocationInput | null; onClose: () => void; onPick: (location: LocationInput) => void }) {
   const map = useRef<MapViewRef>(null);
   const request = useRef(0);
   const session = useRef(0);
@@ -28,11 +28,11 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
   const [address, setAddress] = useState('');
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<FeedbackTone>('info');
-  const [locating, setLocating] = useState(false);
+
   const [privacyReady, setPrivacyReady] = useState(false);
   const configured = Platform.OS === 'ios' ? !!Constants.expoConfig?.extra?.amapIosConfigured : !!Constants.expoConfig?.extra?.amapAndroidConfigured;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!visible) return;
     session.current++;
     request.current++;
@@ -41,12 +41,11 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
     setAddress(initial?.address ?? '');
     setMessage(initial ? '当前为已保存的位置，点击地图可更换' : '正在获取当前位置…');
     setMessageTone(initial ? 'info' : 'loading');
-    setLocating(!initial);
     if (configured) {
       ExpoGaodeMapModule.setPrivacyVersion(PRIVACY_VERSION);
       const ready = ExpoGaodeMapModule.getPrivacyStatus().isReady;
       setPrivacyReady(ready);
-      if (!ready) setLocating(false);
+      if (ready && !initial) void locate(session.current);
     }
     return () => { session.current++; request.current++; };
   }, [visible, initial?.latitude, initial?.longitude, initial?.address, configured]);
@@ -67,19 +66,19 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
   }
 
   async function locate(opened: number) {
-    setLocating(true); setMessage('正在定位…'); setMessageTone('loading');
+    const beforeLookup = request.current;
+    setMessage('正在定位…'); setMessageTone('loading');
     try {
       const permission = await ExpoGaodeMapModule.requestLocationPermission();
       if (session.current !== opened) return;
       if (!permission.granted) throw new Error('未开启定位权限，请在地图上选点，或在系统设置中允许定位');
       const current = await getLocationWithTimeout();
-      if (session.current !== opened) return;
+      if (session.current !== opened || request.current !== beforeLookup) return;
       const next = { latitude: current.latitude, longitude: current.longitude };
-      setCameraTarget(next);
-      void choose(next, opened, false);
+      void choose(next, opened);
     } catch (error) {
-      if (session.current === opened) { setMessage(error instanceof Error ? error.message : '定位失败，可直接在地图上选点'); setMessageTone('error'); }
-    } finally { if (session.current === opened) setLocating(false); }
+      if (session.current === opened && request.current === beforeLookup) { setMessage(error instanceof Error ? error.message : '定位失败，可直接在地图上选点'); setMessageTone('error'); }
+    }
   }
 
   function confirm() {
@@ -94,10 +93,8 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
     if (!initial) void locate(session.current);
   }
 
-  return <Modal visible={visible} animationType="slide" onRequestClose={onClose} onShow={() => {
-    if (configured && !initial && ExpoGaodeMapModule.getPrivacyStatus().isReady) void locate(session.current);
-  }}>
-    <YStack flex={1} backgroundColor="$background" paddingTop={32}>
+  if (!visible) return null;
+  const content = <YStack flex={1} backgroundColor="$background" paddingTop={32}>
       <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={20} paddingBottom={16}>
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="取消选择位置" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' })}><Text color="$brand" fontSize={16}>取消</Text></Pressable>
         <Text color="$color" fontSize={18} fontWeight="700">选择位置</Text>
@@ -111,9 +108,6 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
         <Text color="$muted" fontSize={15} lineHeight={23}>高德地图会处理位置和设备信息，用于显示地图、定位和查询地址。请阅读并同意隐私政策；添加位置时会申请定位权限并自动定位。</Text>
         <Text color="$brand" fontSize={14} onPress={() => { void Linking.openURL('https://lbs.amap.com/pages/privacy/'); }}>查看高德地图隐私权政策 ›</Text>
         <PrimaryButton onPress={acceptPrivacy}>同意并继续</PrimaryButton>
-      </YStack> : locating ? <YStack flex={1} justifyContent="center" alignItems="center" gap={14}>
-        <ActivityIndicator size="large" />
-        <Text color="$muted">正在获取当前位置…</Text>
       </YStack> : <>
         <View style={{ flex: 1, minHeight: 280 }}>
           <MapView ref={map} style={{ flex: 1 }} initialCameraPosition={{ target: cameraTarget, zoom: point ? 16 : 10 }}
@@ -125,9 +119,9 @@ export function MapPicker({ visible, initial, onClose, onPick }: { visible: bool
           <FeedbackNotice message={message} tone={messageTone} />
           <GlassInput placeholder="位置名称或详细地址" value={address} onChangeText={setAddress} accessibilityLabel="位置名称或详细地址" />
           <PrimaryButton onPress={confirm}>使用此位置</PrimaryButton>
-          <Text color="$muted" fontSize={11} textAlign="center">地图服务由高德开放平台提供</Text>
+          <Text color="$muted" fontSize={14} textAlign="center">地图服务由高德开放平台提供</Text>
         </YStack>
       </>}
-    </YStack>
-  </Modal>;
+    </YStack>;
+  return embedded ? content : <Modal visible animationType="slide" onRequestClose={onClose}>{content}</Modal>;
 }

@@ -1,19 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text, XStack, YStack } from 'tamagui';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { api } from '../../src/core/api';
-import { jobResult } from '../../src/core/job-result';
-import { checkChallenge, provideFaceAndResume, replacePhotoAndRetry, replaceQrAndResume, retryAttempt, runJob } from '../../src/core/jobs';
+import { checkChallenge, provideFaceAndResume, replacePhotoAndRetry, replaceQrAndResume, retryAttempt, runJob, isJobRunning, subscribeJobRunner } from '../../src/core/jobs';
 import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } from '../../src/core/media';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { isPracticeActivity } from '../../src/features/courses/demo-course';
 import { practiceQrPayload } from '../../src/features/courses/practice-server';
 import { ReservedPhotoRow } from '../../src/features/photos/reserved-photo-row';
-import { AppScreen, FeedbackNotice, GroupedList, PrimaryButton, SectionTitle, SettingsRow, StatusBadge } from '../../src/ui';
+import { AppScreen, FeedbackNotice, GroupedList, PrimaryButton, SettingsRow, StatusBadge } from '../../src/ui';
 
 export default function JobScreen() {
   const { id, qrPayload, scannedAt } = useLocalSearchParams<{ id: string; qrPayload?: string; scannedAt?: string }>(); const store = useVault(); const data = store.data;
@@ -21,11 +20,15 @@ export default function JobScreen() {
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [reservedPickerAccountId, setReservedPickerAccountId] = useState<string | null>(null);
   const actionRunning = useRef(false);
+  const executing = useSyncExternalStore(subscribeJobRunner, () => isJobRunning(id), () => false);
   useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   useEffect(() => { if (qrPayload && scannedAt && id) {
     void replaceQrAndResume(store, id, qrPayload, scannedAt).catch(e => { setError(e instanceof Error ? e.message : '更新二维码失败'); });
   } }, [qrPayload, scannedAt]);
-  if (!data) return null; const job = data.jobs.find(j => j.id === id); if (!job) return null;
+  const job = data?.jobs.find(j => j.id === id);
+  if (!data || !job) return <AppScreen title="签到结果" backLabel="任务" onBack={() => router.back()}>
+    {store.ready && data && !job && <FeedbackNotice message="未找到这条签到记录" />}
+  </AppScreen>;
 
   async function runAction(key: string, action: () => Promise<boolean | void>) {
     if (actionRunning.current) return;
@@ -72,24 +75,17 @@ export default function JobScreen() {
   }
 
   const attempts = data.attempts.filter(a => a.jobId === id);
-  const result = jobResult(job, attempts);
-  const headerPillBg = result.success ? '$ongoingHeader' : result.needsAttention ? '$dangerSoft' : '$soft';
-  const headerPillFg = result.success ? '$success' : result.needsAttention ? '$danger' : '$muted';
 
-  return <AppScreen title={result.title} subtitle={job.activity.title}
-    backLabel="任务" onBack={() => router.back()}
-    headerAction={<YStack backgroundColor={headerPillBg} paddingHorizontal={10} paddingVertical={5} borderRadius={999}>
-      <Text color={headerPillFg} fontSize={12} fontWeight="500">{result.success ? '已完成' : result.needsAttention ? '待处理' : '进行中'}</Text>
-    </YStack>}>
+  return <AppScreen title="签到结果" subtitle={job.activity.title}
+    backLabel="任务" onBack={() => router.back()}>
     {!!error && <YStack marginBottom={12}><FeedbackNotice message={error} tone="error" /></YStack>}
-    <SectionTitle meta={String(attempts.length).padStart(2, '0')}>各账号结果</SectionTitle>
-    <GroupedList>{attempts.map((attempt, index) => {
+    <GroupedList>{attempts.map(attempt => {
       const account = data.accounts.find(a => a.id === attempt.accountId);
       const hasInlineActions = attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED' || attempt.state === 'WAITING_CAPTCHA' || attempt.state === 'WAITING_FACE';
-      return <YStack key={attempt.accountId} borderBottomWidth={index === attempts.length - 1 ? 0 : 0.7} borderColor="$separator">
-        <SettingsRow title={account?.label ?? '已删除账号'} indexLabel={String(index + 1).padStart(2, '0')}
+      return <YStack key={attempt.accountId}>
+        <SettingsRow title={account?.label ?? '已删除账号'}
           last
-          detail={attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED' ? `${attempt.message ?? ''}${attempt.count ? ` · 提交 ${attempt.count} 次` : ''}` : undefined}
+          detail={attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED' ? attempt.message : undefined}
           accessory={<StatusBadge state={attempt.state} />} />
         {hasInlineActions && <YStack paddingHorizontal={16} paddingBottom={14} gap={8}>
           {(attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED') && actionButton(`retry-${attempt.accountId}`, '检查并重试', () => retryAttempt(store, id, attempt.accountId))}
@@ -103,7 +99,7 @@ export default function JobScreen() {
             </PrimaryButton>}
             {reservedPickerAccountId === attempt.accountId && <GroupedList>{data.settings.reservedPhotos.map((photo, photoIdx) =>
               <ReservedPhotoRow key={photo.id} photo={photo} index={photoIdx} last={photoIdx === data.settings.reservedPhotos.length - 1}
-                detail="点击使用这张照片重试" onSelect={() => {
+                onSelect={() => {
                   if (!reservedPhotoExists(photo.id)) { setError('该照片已丢失，请重新添加'); return; }
                   setReservedPickerAccountId(null);
                   void runAction(`photo-reserved-${attempt.accountId}`, () => retryWithPhoto(attempt.accountId, reservedPhotoUri(photo.id)));
@@ -119,7 +115,7 @@ export default function JobScreen() {
             </PrimaryButton>}
             {reservedPickerAccountId === attempt.accountId && <GroupedList>{data.settings.reservedPhotos.map((photo, photoIdx) =>
               <ReservedPhotoRow key={photo.id} photo={photo} index={photoIdx} last={photoIdx === data.settings.reservedPhotos.length - 1}
-                detail="点击使用这张照片完成人脸验证" onSelect={() => {
+                onSelect={() => {
                   if (!reservedPhotoExists(photo.id)) { setError('该照片已丢失，请重新添加'); return; }
                   setReservedPickerAccountId(null);
                   void runAction(`face-reserved-${attempt.accountId}`, () => provideFaceFromUri(attempt.accountId, reservedPhotoUri(photo.id)));
@@ -133,6 +129,6 @@ export default function JobScreen() {
       {isPracticeActivity(job.activity) && <PrimaryButton variant="secondary" disabled={!!activeAction} onPress={() => { void runAction('practice-qr', () => replaceQrAndResume(store, id, practiceQrPayload(job.activity.id), new Date().toISOString())); }}>使用演练二维码</PrimaryButton>}
       <PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: job.activity.id, jobId: job.id } })}>重新扫码并继续</PrimaryButton>
     </YStack>}
-    {job.state === 'RUNNING' && <YStack marginTop={16}>{actionButton('continue', '继续签到', () => runJob(store, job.id))}</YStack>}
+    {job.state === 'RUNNING' && !executing && <YStack marginTop={16}>{actionButton('continue', '继续签到', () => runJob(store, job.id))}</YStack>}
   </AppScreen>;
 }
