@@ -61,7 +61,7 @@ async function uploadApk(releaseId, apkName, apk) {
         },
       });
       const upload = await fetch(upload_url, {
-        method: 'PUT', body, redirect: 'error',
+        method: 'PUT', body, duplex: 'half', redirect: 'error',
         signal: AbortSignal.any([abort.signal, AbortSignal.timeout(420_000)]),
         headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(apk.length) },
       });
