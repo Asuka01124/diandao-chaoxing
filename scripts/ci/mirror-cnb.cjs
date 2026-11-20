@@ -41,22 +41,39 @@ async function cnb(method, endpoint, body, allowMissing = false) {
 async function uploadApk(releaseId, apkName, apk) {
   const releasePath = releases + '/' + encodeURIComponent(releaseId);
   for (let attempt = 1; attempt <= 3; attempt++) {
+    let watchdog;
     try {
       const { upload_url, verify_url } = await cnb('POST', releasePath + '/asset-upload-url', {
         asset_name: apkName, size: apk.length, ttl: 0, overwrite: true,
       });
       if (new URL(upload_url).protocol !== 'https:') throw new Error('Unexpected CNB upload protocol');
+      // 跨境链路会整段停滞：按上传进度重置 90s 看门狗判停滞，单次尝试 7 分钟封顶。
+      const abort = new AbortController();
+      const arm = () => { clearTimeout(watchdog); watchdog = setTimeout(() => abort.abort(), 90_000); };
+      arm();
+      let offset = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (offset >= apk.length) { controller.close(); return; }
+          controller.enqueue(apk.subarray(offset, offset + 262144));
+          offset += 262144;
+          arm();
+        },
+      });
       const upload = await fetch(upload_url, {
-        // 跨境上传 41MB 实测可能超过 2 分钟，超时过短会连续重试失败。
-        method: 'PUT', body: apk, redirect: 'error', signal: AbortSignal.timeout(600_000),
+        method: 'PUT', body, redirect: 'error',
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(420_000)]),
         headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(apk.length) },
       });
+      clearTimeout(watchdog);
       if (!upload.ok) throw new Error('CNB APK upload failed: HTTP ' + upload.status);
       await cnb('POST', verify_url);
       return;
     } catch (error) {
+      clearTimeout(watchdog);
       if (attempt === 3) throw error;
       console.log('Retrying CNB APK upload (' + attempt + '/3)');
+      await new Promise(resolve => setTimeout(resolve, 30_000));
     }
   }
 }
