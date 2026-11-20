@@ -47,7 +47,7 @@ async function uploadApk(releaseId, apkName, apk) {
         asset_name: apkName, size: apk.length, ttl: 0, overwrite: true,
       });
       if (new URL(upload_url).protocol !== 'https:') throw new Error('Unexpected CNB upload protocol');
-      // 跨境链路会整段停滞：按上传进度重置 90s 看门狗判停滞，单次尝试 7 分钟封顶。
+      // 跨境链路会整段停滞或晚高峰极慢：按上传进度重置 90s 看门狗判停滞，单次尝试 15 分钟封顶。
       const abort = new AbortController();
       const arm = () => { clearTimeout(watchdog); watchdog = setTimeout(() => abort.abort(), 90_000); };
       arm();
@@ -62,7 +62,7 @@ async function uploadApk(releaseId, apkName, apk) {
       });
       const upload = await fetch(upload_url, {
         method: 'PUT', body, duplex: 'half', redirect: 'error',
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(420_000)]),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(900_000)]),
         headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(apk.length) },
       });
       clearTimeout(watchdog);
