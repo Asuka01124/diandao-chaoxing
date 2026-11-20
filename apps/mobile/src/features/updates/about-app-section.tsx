@@ -10,21 +10,21 @@ import { checkCachedUpdates } from './update-checker';
 
 const sourceNames = { cnb: 'CNB 国内源', github: 'GitHub' };
 
-function AboutRow({ kind, title, detail, action, busy, onPress }: {
-  kind: 'update' | 'repo'; title: string; detail?: string; action?: string; busy?: boolean; onPress: () => void;
+function AboutRow({ kind, title, detail, busy, onPress }: {
+  kind: 'update' | 'repo'; title: string; detail?: string; busy?: boolean; onPress: () => void;
 }) {
   const theme = useTheme();
-  return <Pressable onPress={onPress} disabled={busy} accessibilityRole="button" accessibilityLabel={`${title}${detail ? `，${detail}` : ''}${action ? `，${action}` : ''}`}
+  return <Pressable onPress={onPress} disabled={busy} accessibilityRole="button" accessibilityLabel={`${title}${detail ? `，${detail}` : ''}`}
     accessibilityState={{ disabled: !!busy, busy: !!busy }} style={({ pressed }) => ({ backgroundColor: pressed ? theme.soft.val : 'transparent' })}>
     <XStack minHeight={58} paddingLeft={7} paddingVertical={8} alignItems="center" gap={14}>
       <YStack width={6} height={6} borderRadius={3} backgroundColor="$idleDot" />
       <YStack flex={1} gap={3}><Text color="$color" fontSize={15} lineHeight={21} fontWeight="500">{title}</Text>{!!detail && <Text color="$muted" fontSize={14} lineHeight={20}>{detail}</Text>}</YStack>
-      {busy ? <ActivityIndicator size="small" color={theme.muted.val} /> : <>
-        {!!action && <Text color="$muted" fontSize={14} lineHeight={18}>{action}</Text>}
-        <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Path d={kind === 'repo' ? 'M7 17 17 7M7 7h10v10' : 'm9 5 7 7-7 7'} stroke={theme.muted.val} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
-        </Svg>
-      </>}
+      <YStack width={20} height={20} alignItems="center" justifyContent="center">
+        {busy ? <ActivityIndicator size="small" color={theme.muted.val} /> :
+          <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Path d={kind === 'repo' ? 'M7 17 17 7M7 7h10v10' : 'm9 5 7 7-7 7'} stroke={theme.muted.val} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>}
+      </YStack>
     </XStack>
   </Pressable>;
 }
@@ -57,13 +57,12 @@ export function AboutAppSection() {
     if (release) { setDownloadError(''); setDialogOpen(true); return; }
     const controller = new AbortController();
     pending.current = controller;
-    setChecking(true); setFailed(false); setMessage('正在检查更新…');
+    setChecking(true); setFailed(false); setMessage('');
     try {
       const result = await checkCachedUpdates(current, controller.signal);
       if (!mounted.current || controller.signal.aborted) return;
       if (result.available) {
         setRelease(result.release); setDialogOpen(true);
-        setMessage(`发现新版本 ${result.release.tag}`);
       } else {
         setMessage('当前已是最新版本');
       }
@@ -92,12 +91,12 @@ export function AboutAppSection() {
   return <>
     <SectionTitle>关于</SectionTitle>
     <GroupedList>
-      <AboutRow kind="update" title="检查更新" detail={`v${current.version}`} busy={checking}
-        action={Platform.OS === 'ios' ? '查看' : release ? '发现新版本' : failed ? '重试' : undefined} onPress={() => { void check(); }} />
+      <AboutRow kind="update" title="检查更新" detail={`v${current.version}`} busy={checking} onPress={() => { void check(); }} />
       <AboutRow kind="repo" title="项目主页" onPress={() => { void openLink(repositoryUrl); }} />
     </GroupedList>
     {!!message && <Text color={failed ? '$danger' : '$muted'} fontSize={14} lineHeight={18} marginTop={8} marginLeft={4} minHeight={18} accessibilityLiveRegion="polite">{message}</Text>}
-    <Modal visible={dialogOpen} transparent animationType="none" onRequestClose={() => setDialogOpen(false)}>
+    <Modal visible={dialogOpen && !!release} transparent presentationStyle="overFullScreen" animationType="fade"
+      hardwareAccelerated statusBarTranslucent navigationBarTranslucent onRequestClose={() => setDialogOpen(false)}>
       <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
         <Pressable onPress={() => setDialogOpen(false)} accessibilityLabel="关闭版本更新" style={{ position: 'absolute', inset: 0, backgroundColor: theme.overlay.val }} />
         <YStack width="100%" maxWidth={340} alignSelf="center" backgroundColor="$panel" borderRadius={24}
@@ -105,7 +104,6 @@ export function AboutAppSection() {
           <ScrollView style={{ flexShrink: 1, maxHeight: Math.max(96, height * 0.55) }}>
             <Text color="$color" fontSize={22} lineHeight={30} fontWeight="500" accessibilityRole="header" marginBottom={6}>发现新版本</Text>
             <Text color="$muted" fontSize={14} lineHeight={20} marginBottom={18}>v{current.version} → {release?.tag}</Text>
-            <Text color="$color" fontSize={14} lineHeight={20} fontWeight="500" marginBottom={6}>更新内容</Text>
             <Text color="$muted" fontSize={14} lineHeight={21}>{release?.notes}</Text>
           </ScrollView>
           {!!downloadError && <Text color="$danger" fontSize={14} lineHeight={18} accessibilityRole="alert">{downloadError}</Text>}

@@ -40,8 +40,8 @@ export function MapPicker({ visible, initial, onClose, onPick, embedded = false 
     setPoint(initial ? { latitude: initial.latitude, longitude: initial.longitude } : null);
     setCameraTarget(initial ? { latitude: initial.latitude, longitude: initial.longitude } : DEFAULT_CENTER);
     setAddress(initial?.address ?? '');
-    setMessage(initial ? '当前为已保存的位置，点击地图可更换' : '正在获取当前位置…');
-    setMessageTone(initial ? 'info' : 'loading');
+    setMessage(initial ? '' : '正在获取当前位置…');
+    setMessageTone('loading');
     if (configured) {
       ExpoGaodeMapModule.setPrivacyVersion(PRIVACY_VERSION);
       const ready = ExpoGaodeMapModule.getPrivacyStatus().isReady;
@@ -60,7 +60,7 @@ export function MapPicker({ visible, initial, onClose, onPick, embedded = false 
       const result = await reGeocode({ location: next });
       if (request.current !== id || session.current !== opened) return;
       setAddress(result.pois[0]?.name || result.formattedAddress || '');
-      setMessage('已选好位置，请确认名称'); setMessageTone('success');
+      setMessage('');
     } catch {
       if (request.current === id && session.current === opened) { setMessage('地址查询失败，请填写位置名称'); setMessageTone('error'); }
     }
@@ -117,7 +117,7 @@ export function MapPicker({ visible, initial, onClose, onPick, embedded = false 
           </MapView>
         </View>
         <YStack padding={20} paddingBottom={30} gap={12} backgroundColor="$panel" borderTopLeftRadius={25} borderTopRightRadius={25}>
-          <FeedbackNotice message={message} tone={messageTone} />
+          {!!message && <FeedbackNotice message={message} tone={messageTone} />}
           <GlassInput placeholder="位置名称或详细地址" value={address} onChangeText={setAddress} accessibilityLabel="位置名称或详细地址" />
           <PrimaryButton onPress={confirm}>使用此位置</PrimaryButton>
           <Text color="$muted" fontSize={14} textAlign="center">地图服务由高德开放平台提供</Text>

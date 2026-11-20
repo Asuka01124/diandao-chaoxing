@@ -42,10 +42,10 @@ export function GesturePatternPicker({ value, onChange }: { value: string; onCha
       })}
     </View>
     <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={4}>
-      <Text flex={1} color={value.length >= 4 ? '$color' : '$muted'} fontSize={14}>
-        {value.length ? `已连 ${value.split('').join(' · ')}${value.length < 4 ? `（还需 ${4 - value.length} 个）` : ''}` : '按顺序点击至少 4 个圆点'}
-      </Text>
-      {!!value && <XStack gap={12}>
+      {value.length < 4 && <Text flex={1} color="$muted" fontSize={14}>
+        {value.length ? `还需 ${4 - value.length} 个圆点` : '按顺序点击至少 4 个圆点'}
+      </Text>}
+      {!!value && <XStack marginLeft="auto" gap={12}>
         <Pressable accessibilityRole="button" accessibilityLabel="撤销上一步" onPress={() => onChange(value.slice(0, -1))} style={({ pressed }) => ({ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.55 : 1 })}>
           <Text color="$muted" fontSize={14} fontWeight="500">撤销</Text>
         </Pressable>

@@ -85,7 +85,7 @@ export default function PrepareScreen() {
   const openScanner = () => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } });
   const actionLabel = !selected.length ? '请选择签到账号' : needsScan ? '扫描活动二维码' : `为 ${selected.length} 个账号签到`;
 
-  return <AppScreen title="活动签到" subtitle={activity.title} backLabel="返回" onBack={() => router.back()} keyboardAware
+  return <AppScreen title="活动签到" backLabel="返回" onBack={() => router.back()} keyboardAware
     footer={<PrimaryButton variant="dock" onPress={needsScan ? openScanner : () => { void start(); }} loading={busy}
       disabled={!selected.length || activity.kind === 'unknown'}>{actionLabel}</PrimaryButton>}>
 

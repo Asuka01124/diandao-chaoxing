@@ -7,8 +7,8 @@ import { ScrollView, Text, XStack, YStack, useTheme } from 'tamagui';
 export const TabSafeAreaContext = createContext(false);
 export const KeyboardScrollContext = createContext<(() => void) | undefined>(undefined);
 
-export function AppScreen({ title, subtitle, backLabel, onBack, headerAction, children, footer, keyboardAware = false }: {
-  title: string; subtitle?: string; backLabel?: string; onBack?: () => void; headerAction?: ReactNode; children: ReactNode; footer?: ReactNode; keyboardAware?: boolean;
+export function AppScreen({ title, backLabel, onBack, headerAction, children, footer, keyboardAware = false }: {
+  title: string; backLabel?: string; onBack?: () => void; headerAction?: ReactNode; children: ReactNode; footer?: ReactNode; keyboardAware?: boolean;
 }) {
   const theme = useTheme();
   const ScreenFrame = useContext(TabSafeAreaContext) ? View : SafeAreaView;
@@ -56,7 +56,7 @@ export function AppScreen({ title, subtitle, backLabel, onBack, headerAction, ch
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: footer ? 28 : 44 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <KeyboardScrollContext.Provider value={keyboardAware ? onInputFocus : undefined}>
           <YStack width="100%" maxWidth={680} alignSelf="center">
-            <YStack marginBottom={10} gap={4}>
+            <YStack marginBottom={10}>
               <XStack minHeight={46} alignItems="center" gap={10}>
                 {onBack && <Pressable onPress={onBack} accessibilityRole="button"
                   accessibilityLabel={!backLabel || backLabel === '返回' ? '返回' : `返回${backLabel}`}
@@ -66,7 +66,6 @@ export function AppScreen({ title, subtitle, backLabel, onBack, headerAction, ch
                 <Text flex={1} accessibilityRole="header" color="$color" fontSize={23} lineHeight={31} fontWeight="500">{title}</Text>
                 {headerAction}
               </XStack>
-              {!!subtitle && subtitle !== title && <Text fontSize={16} lineHeight={23} color="$muted">{subtitle}</Text>}
             </YStack>
             {children}
           </YStack>

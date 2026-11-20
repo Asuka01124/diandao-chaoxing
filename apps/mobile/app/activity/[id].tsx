@@ -6,7 +6,7 @@ import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { activityPhase } from '../../src/features/courses/activity-phase';
 import { isDemoActivity } from '../../src/features/courses/demo-course';
-import { AppScreen, EmptyState, FeedbackNotice, GroupedList, PrimaryButton, SectionTitle, SettingsRow, type FeedbackTone } from '../../src/ui';
+import { AppScreen, EmptyState, FeedbackNotice, GroupedList, PrimaryButton, SettingsRow, type FeedbackTone } from '../../src/ui';
 
 export default function ActivityScreen() {
   const { id, accountId } = useLocalSearchParams<{ id: string; accountId?: string }>(); const store = useVault(); const data = store.data;
@@ -33,7 +33,7 @@ export default function ActivityScreen() {
     headerAction={<Text color={badgeColor} fontSize={14} fontWeight="500">{ended ? '已结束' : '进行中'}</Text>}
     footer={!ended && activity.kind !== 'unknown' && activity.signed !== true ? <PrimaryButton variant="dock" disabled={busy} onPress={() => router.push({ pathname: '/prepare/[id]', params: { id: activity.id, accountId: account?.id } })}>准备签到</PrimaryButton> : undefined}>
     {status && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <SectionTitle>签到信息</SectionTitle><GroupedList>
+    <GroupedList>
       <SettingsRow title="我的状态" accessory={<Text color={activity.signed === true ? '$success' : '$color'} fontSize={14} fontWeight="500">{activity.signed === true ? '已签到' : activity.signed === false ? '未签到' : '待确认'}</Text>} last={!activity.endTime && !requirement && !activity.relation?.signOutId} />
       {!!activity.endTime && <SettingsRow title="截止时间" detail={new Date(activity.endTime).toLocaleString()} last={!requirement && !activity.relation?.signOutId} />}
       {!!requirement && <SettingsRow title="签到要求" detail={requirement} last={!activity.relation?.signOutId} />}

@@ -92,7 +92,7 @@ export default function AccountsScreen() {
           <GlassInput placeholder="密码" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="密码" />
           <YStack marginTop={4}><PrimaryButton loading={busy} disabled={!!checkingId} onPress={() => { void add(); }}>{reauthId ? '重新登录' : '保存账号'}</PrimaryButton></YStack>
         </ScrollView>
-      </KeyboardAvoidingView> : <ActionSheet embedded visible={!!target} title={target?.label ?? ''} subtitle={target?.session.identifier} onClose={() => setSelected(null)} actions={target ? [
+      </KeyboardAvoidingView> : <ActionSheet embedded visible={!!target} title={target?.label ?? ''} subtitle={target && target.label !== target.session.identifier ? target.session.identifier : undefined} onClose={() => setSelected(null)} actions={target ? [
       { label: checkingId === target.id ? '正在检查…' : '检查登录状态', onPress: () => { void check(target.id); } },
       { label: '重新登录', onPress: () => { setReauthId(target.id); setIdentifier(target.session.identifier); setLabel(target.label); setPassword(''); setSheetOpen(true); } },
       { label: '删除账号', danger: true, onPress: () => { void remove(target.id); } },

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { ActivityIndicator, AppState, Pressable } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { XStack, YStack, useTheme } from 'tamagui';
+import { Text, XStack, YStack, useTheme } from 'tamagui';
 import type { Account, Course } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
@@ -10,7 +10,7 @@ import { CourseCard } from '../../src/features/courses/course-card';
 import { courseKey, ongoingCourseActivities } from '../../src/features/courses/course-priority';
 import { OngoingAttendanceCard } from '../../src/features/courses/ongoing-attendance-card';
 import { useVault } from '../../src/state';
-import { AppScreen, FeedbackNotice, GroupedList, SectionTitle, type FeedbackTone } from '../../src/ui';
+import { AppScreen, FeedbackNotice, GroupedList, type FeedbackTone } from '../../src/ui';
 
 type CourseLayout = 'list' | 'grid';
 
@@ -53,7 +53,7 @@ export default function CoursesScreen() {
 
   async function loadCourses(current: Account, manual = false) {
     const request = ++sequence.current;
-    setBusy(true); setStatus({ tone: 'loading', message: manual ? '正在刷新…' : '正在加载…' });
+    setBusy(true); setStatus(null);
     try {
       const session = await api.check(current.session);
       await store.update(v => { const item = v.accounts.find(a => a.id === current.id); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } });
@@ -139,8 +139,9 @@ export default function CoursesScreen() {
   </XStack>;
 
   return <AppScreen title="我的课程" headerAction={headerControls}>
-    {status && status.tone !== 'loading' && <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>}
-    <SectionTitle meta={status?.tone === 'loading' ? status.message : undefined}>全部课程</SectionTitle>
+    {status && (status.tone === 'loading'
+      ? <Text color="$muted" fontSize={14} marginBottom={8}>{status.message}</Text>
+      : <YStack marginBottom={14}><FeedbackNotice message={status.message} tone={status.tone} /></YStack>)}
     {courseCards}
     <OngoingAttendanceCard entries={ongoing}
       onPress={activity => router.push({ pathname: '/activity/[id]', params: { id: activity.id, accountId: account.id } })}

@@ -113,11 +113,8 @@ export default function JobScreen() {
     }
     if (first) throw first;
   }
-  const notice = signedAll || !attempts.length ? null : {
-    text: attempts.every(a => a.state === 'EXPIRED') ? '活动已结束，未签到' : '学习通未签到',
-    action: captchaTargets.length + faceTargets.length > 0 ? { key: 'check', label: '检查结果', run: checkWaiting }
-      : failedTargets.length > 0 ? { key: 'retry', label: '检查并重试', run: retryFailed } : null,
-  };
+  const resultAction = captchaTargets.length + faceTargets.length > 0 ? { key: 'check', label: '检查结果', run: checkWaiting }
+    : failedTargets.length > 0 ? { key: 'retry', label: '检查并重试', run: retryFailed } : null;
 
   const accountActions = (attempt: Attempt) => {
     const accountId = attempt.accountId;
@@ -150,17 +147,20 @@ export default function JobScreen() {
   }
 
   const requirements = job.activity.requirements;
-  const itemRows: { label: string; meta: string; active: boolean }[] = [{
+  const photoStatus = signedAll ? undefined : job.photoUri ? '已添加照片' : '待添加照片';
+  const itemRows: { label: string; meta?: string; active: boolean }[] = [{
     label: kindLabels[job.input.kind] ?? '签到',
-    meta: job.input.kind === 'qr' ? (qrWaiting ? '待新码' : signedAll ? '已完成' : '待确认')
-      : job.input.kind === 'photo' ? (signedAll ? '已完成' : job.photoUri ? '已添加照片' : '待添加照片')
-        : signedAll ? '已完成' : '待确认',
+    meta: job.input.kind === 'photo' ? photoStatus : undefined,
     active: job.input.kind === 'qr' ? qrWaiting : photoTargets.length > 0,
   }];
-  if (requirements?.captcha) itemRows.push({ label: '验证码', meta: captchaTargets.length ? '待验证码' : signedAll ? '已完成' : '待确认', active: captchaTargets.length > 0 });
-  if (requirements?.face) itemRows.push({ label: '人脸验证', meta: faceTargets.length ? (faceTargets.every(a => job.faceMediaIdByAccount?.[a.accountId]) ? '待验证' : '待添加照片') : signedAll ? '已完成' : '待确认', active: faceTargets.length > 0 });
-  if (requirements?.location) itemRows.push({ label: '位置', meta: 'location' in job.input && job.input.location ? '已填写' : '待确认', active: false });
-  if (requirements?.photo && job.input.kind !== 'photo') itemRows.push({ label: '照片', meta: job.photoUri ? '已添加照片' : '待添加照片', active: photoTargets.length > 0 });
+  if (requirements?.captcha) itemRows.push({ label: '验证码', active: captchaTargets.length > 0 });
+  if (requirements?.face) itemRows.push({
+    label: '人脸验证',
+    meta: faceTargets.some(a => !job.faceMediaIdByAccount?.[a.accountId]) ? '待添加照片' : undefined,
+    active: faceTargets.length > 0,
+  });
+  if (requirements?.location) itemRows.push({ label: '位置', meta: 'location' in job.input && job.input.location ? '已填写' : undefined, active: false });
+  if (requirements?.photo && job.input.kind !== 'photo') itemRows.push({ label: '照片', meta: photoStatus, active: photoTargets.length > 0 });
 
   const groupHeader = (label: string, open: boolean, toggle: () => void) =>
     <Pressable onPress={toggle} accessibilityRole="button" accessibilityLabel={`${label}，${open ? '收起' : '展开'}`} accessibilityState={{ expanded: open }}
@@ -214,19 +214,10 @@ export default function JobScreen() {
         </Pressable>;
       })}
     </XStack>
-    {notice && <XStack marginHorizontal={-20} paddingHorizontal={20} minHeight={42} alignItems="center" justifyContent="space-between" gap={10} backgroundColor="$dangerSoft" marginBottom={4}>
-      <XStack alignItems="center" gap={7} flexShrink={1}>
-        <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Circle cx={12} cy={12} r={9} stroke={theme.danger.val} strokeWidth={1.75} />
-          <Path d="M12 7v6m0 3v.2" stroke={theme.danger.val} strokeWidth={1.75} strokeLinecap="round" />
-        </Svg>
-        <Text color="$danger" fontSize={14} flexShrink={1}>{notice.text}</Text>
-      </XStack>
-      {notice.action && <Pressable onPress={() => { void runAction(notice.action!.key, notice.action!.run); }} accessibilityRole="button" accessibilityLabel={notice.action.label}
-        style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}>
-        <Text color="$muted" fontSize={13} textDecorationLine="underline">{notice.action.label}</Text>
-      </Pressable>}
-    </XStack>}
+    {resultAction && <YStack alignSelf="flex-start">
+      <PrimaryButton variant="secondary" loading={activeAction === resultAction.key} disabled={!!activeAction}
+        onPress={() => { void runAction(resultAction.key, resultAction.run); }}>{resultAction.label}</PrimaryButton>
+    </YStack>}
     {tab === 'current' ? <>
       {groupHeader('签到对象', openObjects, () => setOpenObjects(v => !v))}
       {openObjects && <GroupedList>{attempts.map(attempt => {
@@ -261,7 +252,7 @@ export default function JobScreen() {
       actions={[]} onClose={() => setSheet(null)} />
     <ActionSheet visible={sheet?.kind === 'account' && !!sheetAttempt} title={sheetAttempt ? accountLabel(sheetAttempt.accountId) : ''}
       actions={sheetAttempt ? accountActions(sheetAttempt) : []} onClose={() => setSheet(null)} />
-    <ActionSheet visible={sheet?.kind === 'pick'} title="选择账号" subtitle={sheet?.kind === 'pick' && sheet.camera ? '为哪个账号拍照？' : '为哪个账号选择照片？'}
+    <ActionSheet visible={sheet?.kind === 'pick'} title={sheet?.kind === 'pick' && sheet.camera ? '为哪个账号拍照？' : '为哪个账号选择照片？'}
       actions={dockTargets.map(attempt => ({ label: accountLabel(attempt.accountId), onPress: () => { if (sheet?.kind === 'pick') startPicker(sheet.camera, attempt.accountId); } }))} onClose={() => setSheet(null)} />
   </AppScreen>;
 }
