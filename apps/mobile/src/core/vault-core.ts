@@ -21,10 +21,8 @@ export class EncryptedVault {
   }
   async read(): Promise<VaultData> {
     const name = this.ports.files.exists(main) ? main : this.ports.files.exists(backup) ? backup : null;
-    if (!name) {
-      if (await this.ports.key.get()) throw new Error('加密文件缺失，请检查设备存储');
-      return emptyVault();
-    }
+    // 首次写入中断时可能只留下密钥和临时文件。下次写入会复用密钥并替换临时文件。
+    if (!name) return emptyVault();
     const hex = await this.ports.key.get();
     if (!hex) throw new Error('本地密钥缺失，现有账号资料无法恢复');
     try {

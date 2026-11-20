@@ -1,4 +1,5 @@
 import type { Activity, ProviderSession } from "@sign/shared";
+import { ProviderError } from "./errors";
 import { asArray, asObject, json, stamp, str } from "./response";
 import { RequestSession, type Transport } from "./session";
 import { signStatus } from './sign';
@@ -25,8 +26,13 @@ export async function activities(
   await Promise.all(Array.from({ length: Math.min(2, list.length) }, async () => {
     while (index < list.length) {
       const activity = list[index++];
-      const status = await signStatus(session, activity, transport);
-      activity.signed = status.state === 'SIGNED' ? true : status.state === 'READY' || status.state === 'EXPIRED' ? false : null;
+      try {
+        const status = await signStatus(session, activity, transport);
+        activity.signed = status.state === 'SIGNED' ? true : status.state === 'READY' || status.state === 'EXPIRED' ? false : null;
+      } catch (error) {
+        // 单个活动无法确认时保留列表中的待确认状态。
+        if (!(error instanceof ProviderError) || error.code !== 'PROVIDER_CHANGED') throw error;
+      }
     }
   }));
   return list;

@@ -115,6 +115,31 @@ test('升级后旧演练活动和任务不再出现在正式数据中', async ()
   expect(loaded.attempts.map(attempt => attempt.jobId)).toEqual(['real-job']);
 });
 
+test.each([false, true])('首次保存中断后可重新保存账号（残留临时文件：%s）', async leavesPartialFile => {
+  const interruptedVault = new EncryptedVault({
+    ...ports,
+    files: {
+      ...ports.files,
+      write: async (name, bytes) => {
+        if (leavesPartialFile) await ports.files.write(name, bytes.subarray(0, 8));
+        throw new Error('interrupted write');
+      },
+    },
+  });
+  const data = emptyVault();
+  data.accounts = [account('alice', 'primary')];
+  await expect(interruptedVault.write(data)).rejects.toThrow('interrupted write');
+  const savedKey = key;
+  expect(savedKey).not.toBeNull();
+
+  const restartedVault = new EncryptedVault(ports);
+  expect(await restartedVault.read()).toEqual(emptyVault());
+  await restartedVault.write(data);
+  expect((await restartedVault.read()).accounts).toEqual(data.accounts);
+  expect(key).toBe(savedKey);
+  expect(files.has('vault.bin.tmp')).toBe(false);
+});
+
 test('只剩备份文件时替换中断仍可恢复原资料', async () => {
   const vault = new EncryptedVault(ports); const first = emptyVault(); first.accounts = [account('alice')]; await vault.write(first);
   files.set('vault.bin.bak', files.get('vault.bin')!); files.delete('vault.bin');

@@ -15,10 +15,13 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const reload = useCallback(async () => {
     try {
       const loaded = await readVault(); current.current = loaded; setData(loaded); setError(null);
-    } catch (e) { setError(e instanceof Error ? e.message : '本地资料读取失败'); }
-    finally { setReady(true); }
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error('本地资料读取失败');
+      setError(failure.message);
+      throw failure;
+    } finally { setReady(true); }
   }, []);
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { void reload().catch(() => {}); }, [reload]);
   const update = useCallback((change: (value: VaultData) => void): Promise<void> => {
     const next = chain.current.then(async () => {
       if (!current.current) throw new Error('本地资料尚未读取');

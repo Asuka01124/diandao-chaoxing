@@ -125,6 +125,30 @@ test('真实响应回归：四次列表标记都为 1，第五次未签到，其
   expect(submissions).toBe(0);
 });
 
+test('单个活动状态未知时继续同步同课程的其他活动', async () => {
+  const ids = ['fifth', 'fourth', 'third'];
+  const result = await activities(account, activity.courseId, activity.classId, async url => {
+    const target = new URL(url);
+    if (target.pathname.endsWith('/activelist')) {
+      return Response.json({ data: { activeList: ids.map(id => ({ id, type: 2, otherId: 0, status: 2, userStatus: 1 })) } });
+    }
+    if (target.pathname.endsWith('/preSign')) {
+      const id = target.searchParams.get('activePrimaryId');
+      return new Response(id === 'fifth' ? 'var signstatus = 5;' : id === 'fourth' ? 'var signstatus = 1;' : '下次早点哦');
+    }
+    throw new Error('读取列表不应请求其他接口');
+  });
+  expect(result.map(item => [item.id, item.signed])).toEqual([['fifth', null], ['fourth', true], ['third', false]]);
+});
+
+test('活动列表仍会报告会话过期', async () => {
+  await expect(activities(account, activity.courseId, activity.classId, async url =>
+    new URL(url).pathname.endsWith('/activelist')
+      ? Response.json(list(0))
+      : new Response('<form action="https://passport2.chaoxing.com/fanyalogin"><input type="password"></form>')
+  )).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+});
+
 test('活动结束不会覆盖已确认的个人签到记录', () => {
   expect(parseStatusPage('var signstatus = 1; 已过教师设置的截止时间 下次早点哦').state).toBe('SIGNED');
   expect(parseStatusPage('已过教师设置的截止时间 下次早点哦').state).toBe('EXPIRED');

@@ -1,5 +1,10 @@
 # Android APK 构建记录（Windows）
 
+## 2026-11-21 课程同步与资料恢复修复包
+
+- 首次导出在 Metro 读取 Bun 依赖中的 React Native `console.js` 时失败，报 `Failed to get the SHA-1`。文件已存在，Metro 的文件映射缺少该路径。导出进程用临时预加载脚本为仓库内已存在的文件补算 SHA-1，Expo 导出和 Hermes 编译均成功。
+- 以手机上已安装的预览 APK 为基包，复用包名和签名。30 个导出资源均有映射，26 个非 XML 资源逐字节一致。新包通过 v2/v3 签名验证和 16 KB 对齐检查。
+
 ## 2026-11-20 新签到结果页预览包（含演练课程）
 
 - 预览脚手架 `.tooling/ui-preview-qslho5xk` 用 Metro transformer 覆盖：结果页用工作树新版，演练全套文件取自 `ae9cda6`（1.8.2）的 api/jobs/vault-core/demo-course/practice-server/courses/prepare/activity/course；正式代码未改。
