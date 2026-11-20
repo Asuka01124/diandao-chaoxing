@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { beforeEach, expect, test } from 'bun:test';
 import { emptyVault, type Account, type Activity, type VaultData } from '@sign/shared';
 import { EncryptedVault, type VaultPorts } from './vault-core';
-import { DEMO_COURSE_ID } from '../features/courses/demo-course';
+import { DEMO_COURSE_ID, PRACTICE_COURSE_ID } from '../features/courses/demo-course';
 
 const files = new Map<string, Uint8Array>();
 let key: string | null = null;
@@ -95,14 +95,17 @@ test('升级后旧演练活动和任务不再出现在正式数据中', async ()
   const vault = new EncryptedVault(ports);
   const data = emptyVault();
   const demo: Activity = { id: '_daodian_demo_click_', courseId: DEMO_COURSE_ID, classId: '_daodian_demo_class_', source: 'course', title: '旧演练活动', kind: 'click', startTime: null, endTime: null, signed: false, ext: '{}' };
+  const practice = { ...demo, id: '_daodian_practice_face_', courseId: PRACTICE_COURSE_ID, classId: '_daodian_practice_class_', title: '人脸签到演练' };
   const real = { ...demo, id: 'real-activity', courseId: 'real-course', classId: 'real-class' };
-  data.activityCache = [demo, real];
+  data.activityCache = [demo, practice, real];
   data.jobs = [
     { id: 'demo-job', activity: demo, input: { kind: 'click' }, accountIds: ['alice'], createdAt: '', state: 'DONE' },
+    { id: 'practice-job', activity: practice, input: { kind: 'click' }, accountIds: ['alice'], createdAt: '', state: 'DONE' },
     { id: 'real-job', activity: real, input: { kind: 'click' }, accountIds: ['alice'], createdAt: '', state: 'DONE' },
   ];
   data.attempts = [
     { jobId: 'demo-job', accountId: 'alice', state: 'SUCCESS', count: 1, updatedAt: '' },
+    { jobId: 'practice-job', accountId: 'alice', state: 'SUCCESS', count: 1, updatedAt: '' },
     { jobId: 'real-job', accountId: 'alice', state: 'SUCCESS', count: 1, updatedAt: '' },
   ];
   await vault.write(data);

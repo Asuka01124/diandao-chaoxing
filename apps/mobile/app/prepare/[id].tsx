@@ -9,8 +9,6 @@ import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } f
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount, primaryAccount } from '../../src/features/accounts/account-role';
 import { GesturePatternPicker } from '../../src/features/courses/gesture-pattern-picker';
-import { isPracticeActivity } from '../../src/features/courses/demo-course';
-import { practiceQrPayload } from '../../src/features/courses/practice-server';
 import { prepareErrorMessage } from '../../src/features/courses/prepare-error';
 import { MapPicker } from '../../src/features/location/map-picker';
 import { photoName } from '../../src/features/photos/photo-name';
@@ -23,7 +21,6 @@ export default function PrepareScreen() {
   const selected = selectedAccountIds ?? data?.accounts.map(account => account.id) ?? [];
   const [location, setLocation] = useState<LocationInput | null>(null); const [mapOpen, setMapOpen] = useState(false);
   const [code, setCode] = useState(''); const [gesture, setGesture] = useState(''); const [busy, setBusy] = useState(false);
-  const [practiceScannedAt, setPracticeScannedAt] = useState<string | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [reservedPhotoId, setReservedPhotoId] = useState<string | null>(null);
   const [photoLabel, setPhotoLabel] = useState('');
@@ -31,8 +28,6 @@ export default function PrepareScreen() {
   const theme = useTheme();
   useEffect(() => { if (store.ready && !hasPrimaryAccount(data)) router.replace('/'); }, [store.ready, data?.accounts]);
   if (!data || !activity) return null;
-  const effectiveQrPayload = qrPayload ?? (practiceScannedAt ? practiceQrPayload(activity.id) : undefined);
-  const effectiveScannedAt = qrPayload ? scannedAt : practiceScannedAt;
 
   function input(): SignInput {
     if (!activity) throw new Error('活动不存在');
@@ -48,8 +43,8 @@ export default function PrepareScreen() {
       return { kind: 'gesture', sequence: gesture, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'qr') {
-      if (!effectiveScannedAt || !effectiveQrPayload) throw new Error('请先扫描当前活动的二维码');
-      return { kind: 'qr', qrPayload: effectiveQrPayload, scannedAt: effectiveScannedAt, ...(location ? { location } : {}) };
+      if (!scannedAt || !qrPayload) throw new Error('请先扫描当前活动的二维码');
+      return { kind: 'qr', qrPayload, scannedAt, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'photo') return { kind: 'photo', mediaIdByAccount: {}, ...(location ? { location } : {}) };
     throw new Error('暂不支持此类签到，请在学习通中完成');
@@ -85,7 +80,7 @@ export default function PrepareScreen() {
   const allSelected = selected.length === allIds.length;
   const main = primaryAccount(data);
 
-  const qrReady = !!effectiveScannedAt && !!effectiveQrPayload;
+  const qrReady = !!scannedAt && !!qrPayload;
   const needsScan = activity.kind === 'qr' && !qrReady;
   const openScanner = () => router.push({ pathname: '/scan', params: { id: activity.id, accountId, selectedIds: selected.join(',') } });
   const actionLabel = !selected.length ? '请选择签到账号' : needsScan ? '扫描活动二维码' : `为 ${selected.length} 个账号签到`;
@@ -122,9 +117,6 @@ export default function PrepareScreen() {
       <GroupedList>
         <SettingsRow title="活动二维码" value={qrReady ? '已扫描' : '待扫描'} onPress={openScanner} />
         {activity.requirements?.face && <SettingsRow title="提交后需人脸验证" />}
-        {isPracticeActivity(activity) && !qrReady && <SettingsRow title="使用演练二维码" onPress={() => {
-          setPracticeScannedAt(new Date().toISOString());
-        }} />}
       </GroupedList>
     </>}
 

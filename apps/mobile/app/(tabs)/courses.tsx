@@ -8,7 +8,6 @@ import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { CourseCard } from '../../src/features/courses/course-card';
 import { courseKey, ongoingCourseActivities } from '../../src/features/courses/course-priority';
-import { PRACTICE_CLASS_ID, PRACTICE_COURSE_ID } from '../../src/features/courses/demo-course';
 import { OngoingAttendanceCard } from '../../src/features/courses/ongoing-attendance-card';
 import { useVault } from '../../src/state';
 import { AppScreen, FeedbackNotice, GroupedList, SectionTitle, type FeedbackTone } from '../../src/ui';
@@ -113,16 +112,14 @@ export default function CoursesScreen() {
   }
 
   if (!data || !account) return null;
-  const practiceCourse: Course = { id: PRACTICE_COURSE_ID, classId: PRACTICE_CLASS_ID, name: '签到演练' };
-  const visibleCourses = [...courses, practiceCourse];
   const nameCounts = new Map<string, number>();
-  for (const course of visibleCourses) nameCounts.set(course.name, (nameCounts.get(course.name) ?? 0) + 1);
+  for (const course of courses) nameCounts.set(course.name, (nameCounts.get(course.name) ?? 0) + 1);
   const ongoing = ongoingCourseActivities(courses, data.activityCache, account.id, now).filter(entry => entry.activity.signed !== true);
   const openCourse = (course: Course) => router.push({ pathname: '/course/[id]', params: { id: course.id, classId: course.classId, accountId: account.id, name: course.name } });
   const courseCards = layout === 'list'
-    ? <GroupedList>{visibleCourses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} showTeacher={(nameCounts.get(course.name) ?? 0) > 1} index={index} session={account.session} last={index === visibleCourses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
-    : <YStack gap={12}>{Array.from({ length: Math.ceil(visibleCourses.length / 2) }, (_, rowIndex) => {
-      const pair = visibleCourses.slice(rowIndex * 2, rowIndex * 2 + 2);
+    ? <GroupedList>{courses.map((course, index) => <CourseCard key={`${course.id}-${course.classId}`} course={course} showTeacher={(nameCounts.get(course.name) ?? 0) > 1} index={index} session={account.session} last={index === courses.length - 1} onPress={() => openCourse(course)} />)}</GroupedList>
+    : <YStack gap={12}>{Array.from({ length: Math.ceil(courses.length / 2) }, (_, rowIndex) => {
+      const pair = courses.slice(rowIndex * 2, rowIndex * 2 + 2);
       return <XStack key={pair[0].id + '-' + pair[0].classId} gap={12}>
         {pair.map((course, colIndex) => <YStack key={`${course.id}-${course.classId}`} flex={1}><CourseCard course={course} showTeacher={(nameCounts.get(course.name) ?? 0) > 1} index={rowIndex * 2 + colIndex} session={account.session} layout="grid" onPress={() => openCourse(course)} /></YStack>)}
         {pair.length === 1 && <YStack flex={1} />}

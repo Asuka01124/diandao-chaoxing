@@ -7,7 +7,7 @@ import type { Activity } from '@sign/shared';
 import { api } from '../../src/core/api';
 import { primaryAccount } from '../../src/features/accounts/account-role';
 import { attendanceRow, courseAttendanceGroups } from '../../src/features/courses/attendance-list';
-import { isDemoCourse, isPracticeCourse } from '../../src/features/courses/demo-course';
+import { isDemoCourse } from '../../src/features/courses/demo-course';
 import { useVault } from '../../src/state';
 import { AppScreen, EmptyState, FeedbackNotice, GroupedList, SectionTitle, SettingsRow, useFeedback } from '../../src/ui';
 
@@ -28,7 +28,7 @@ export default function CourseActivitiesScreen() {
     if (!account || !id || !classId || isDemoCourse(id)) return;
     setBusy(true); setError('');
     try {
-      const session = await api.check(account.session, isPracticeCourse(id));
+      const session = await api.check(account.session);
       const activities = await api.activities(session, id, classId);
       await store.update(v => {
         const item = v.accounts.find(a => a.id === account.id);

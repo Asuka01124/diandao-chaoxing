@@ -9,8 +9,6 @@ import { checkChallenge, provideFaceAndResume, replacePhotoAndRetry, replaceQrAn
 import { clearStagedPhoto, reservedPhotoExists, reservedPhotoUri, stagePhoto } from '../../src/core/media';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
-import { isPracticeActivity } from '../../src/features/courses/demo-course';
-import { practiceQrPayload } from '../../src/features/courses/practice-server';
 import { ReservedPhotoRow } from '../../src/features/photos/reserved-photo-row';
 import { AppScreen, FeedbackNotice, GroupedList, PrimaryButton, SettingsRow, StatusBadge } from '../../src/ui';
 
@@ -52,10 +50,9 @@ export default function JobScreen() {
     const converted = await ImageManipulator.manipulateAsync(source, [], { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG });
     const file = new File(converted.uri);
     try {
-      const practice = isPracticeActivity(job!.activity);
-      const session = await api.check(account.session, practice);
+      const session = await api.check(account.session);
       await store.update(v => { const item = v.accounts.find(a => a.id === accountId); if (item) item.session = session; });
-      const { mediaId } = await api.upload(session, await file.base64(), practice);
+      const { mediaId } = await api.upload(session, await file.base64());
       await provideFaceAndResume(store, id, accountId, mediaId);
       return true;
     } finally { if (file.exists) file.delete(); if (source.startsWith(Paths.cache.uri)) { const original = new File(source); if (original.exists) original.delete(); } }
@@ -126,7 +123,6 @@ export default function JobScreen() {
       </YStack>;
     })}</GroupedList>
     {attempts.some(a => a.state === 'WAITING_QR') && <YStack marginTop={16} gap={8}>
-      {isPracticeActivity(job.activity) && <PrimaryButton variant="secondary" disabled={!!activeAction} onPress={() => { void runAction('practice-qr', () => replaceQrAndResume(store, id, practiceQrPayload(job.activity.id), new Date().toISOString())); }}>使用演练二维码</PrimaryButton>}
       <PrimaryButton onPress={() => router.push({ pathname: '/scan', params: { id: job.activity.id, jobId: job.id } })}>重新扫码并继续</PrimaryButton>
     </YStack>}
     {job.state === 'RUNNING' && !executing && <YStack marginTop={16}>{actionButton('continue', '继续签到', () => runJob(store, job.id))}</YStack>}

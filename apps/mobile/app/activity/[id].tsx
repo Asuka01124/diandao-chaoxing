@@ -5,7 +5,7 @@ import { api } from '../../src/core/api';
 import { useVault } from '../../src/state';
 import { hasPrimaryAccount } from '../../src/features/accounts/account-role';
 import { activityPhase } from '../../src/features/courses/activity-phase';
-import { isDemoActivity, isPracticeActivity } from '../../src/features/courses/demo-course';
+import { isDemoActivity } from '../../src/features/courses/demo-course';
 import { AppScreen, EmptyState, FeedbackNotice, GroupedList, PrimaryButton, SectionTitle, SettingsRow, type FeedbackTone } from '../../src/ui';
 
 export default function ActivityScreen() {

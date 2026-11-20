@@ -1,7 +1,6 @@
 import type { Activity, Course, ProviderSession, SignInput, SignStatus } from '@sign/shared';
 import * as provider from '@sign/provider-adapter';
-import { isDemoActivity, isDemoCourse, isPracticeActivity, isPracticeCourse } from '../features/courses/demo-course';
-import { createPracticeTransport } from '../features/courses/practice-server';
+import { isDemoActivity, isDemoCourse } from '../features/courses/demo-course';
 
 export class ClientError extends Error {
   constructor(public code: string, message: string, public retryable = false) { super(message); }
@@ -17,28 +16,20 @@ async function direct<T>(operation: () => Promise<T>): Promise<T> {
 
 export const api = {
   login: (identifier: string, password: string, deviceCode: string) => direct(() => provider.login(identifier, password, deviceCode)),
-  check: (session: ProviderSession, practice = false) => direct(() => provider.checkSession(session, practice ? createPracticeTransport(session) : undefined)),
+  check: (session: ProviderSession) => direct(() => provider.checkSession(session)),
   courses: (session: ProviderSession) => direct<Course[]>(() => provider.courses(session)),
   courseCover: (session: ProviderSession, imageUrl: string) => direct(() => provider.courseCover(session, imageUrl)),
-  activities: (session: ProviderSession, courseId: string, classId: string) => isPracticeCourse(courseId)
-    ? direct(() => provider.activities(session, courseId, classId, createPracticeTransport(session)))
-    : isDemoCourse(courseId)
-      ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试课程不读取学习通活动'))
-      : direct(() => provider.activities(session, courseId, classId)),
-  detail: (session: ProviderSession, activity: Activity) => isPracticeActivity(activity)
-    ? direct(() => provider.activityDetail(session, activity, createPracticeTransport(session)))
-    : isDemoActivity(activity)
-      ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不读取学习通详情'))
-      : direct(() => provider.activityDetail(session, activity)),
-  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>) => isPracticeActivity(activity)
-    ? direct<SignStatus>(() => provider.submit(session, activity, input, createPracticeTransport(session), faceMediaId, onSubmit))
-    : isDemoActivity(activity)
-      ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不可提交到学习通'))
-      : direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId, onSubmit)),
-  status: (session: ProviderSession, activity: Activity) => isPracticeActivity(activity)
-    ? direct<SignStatus>(() => provider.signStatus(session, activity, createPracticeTransport(session)))
-    : isDemoActivity(activity)
-      ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动没有学习通签到状态'))
-      : direct<SignStatus>(() => provider.signStatus(session, activity)),
-  upload: (session: ProviderSession, jpegBase64: string, practice = false) => direct(() => provider.uploadPhoto(session, jpegBase64, practice ? createPracticeTransport(session) : undefined)),
+  activities: (session: ProviderSession, courseId: string, classId: string) => isDemoCourse(courseId)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试课程不读取学习通活动'))
+    : direct(() => provider.activities(session, courseId, classId)),
+  detail: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不读取学习通详情'))
+    : direct(() => provider.activityDetail(session, activity)),
+  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>) => isDemoActivity(activity)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不可提交到学习通'))
+    : direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId, onSubmit)),
+  status: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
+    ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动没有学习通签到状态'))
+    : direct<SignStatus>(() => provider.signStatus(session, activity)),
+  upload: (session: ProviderSession, jpegBase64: string) => direct(() => provider.uploadPhoto(session, jpegBase64)),
 };
