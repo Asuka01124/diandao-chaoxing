@@ -1,5 +1,34 @@
 # Android APK 构建记录（Windows）
 
+## 2026-11-20 新签到结果页预览包（含演练课程）
+
+- 预览脚手架 `.tooling/ui-preview-qslho5xk` 用 Metro transformer 覆盖：结果页用工作树新版，演练全套文件取自 `ae9cda6`（1.8.2）的 api/jobs/vault-core/demo-course/practice-server/courses/prepare/activity/course；正式代码未改。
+- 最早失败一：`expo export:embed --transformer` 被 CLI 忽略（`loadMetroConfigAsync` 只传 resetCache/maxWorkers），覆盖不生效且导出"成功"。已验证修复：临时创建 `apps/mobile/metro.config.js` 指向 `preview.metro.js`，导出后删除；用字节码是否含演练串判断覆盖生效，不能只看退出码。
+- 最早失败二：preview-transformer 报 `ENOENT …/apps/mobile/undefined`，根因是漏传 `PREVIEW_MOBILE_DIR` 环境变量（preview.metro.js 只设置 PREVIEW_ORIGINAL_TRANSFORMER）。
+- 最早失败三：`Unable to resolve …/practice-server`——正式树已删除该文件，transformer 只换源码不换解析。已验证修复：preview.metro.js 加回落解析——脚手架副本内的相对导入回正式树解析（内容由 transformer 按正式树路径替换，保证单份模块），正式树缺失时按扩展名回落脚手架副本。
+- 重打包不走 Gradle：以上一轮 `preview-signed.apk`（dev.local.sign.demo、arm64、原签名）为基包，仅替换 `assets/index.android.bundle`。资源经 `aapt2 dump resources` 的名字→短路径映射逐字节核对：21 个一致、5 个图标类 PNG 用导出版替换、2 个 XML 是 aapt2 二进制编译产物保留基包条目。`out/res` 必须先清掉旧导出残留（混入非 bun 命名资源时基包 arsc 无映射）。
+- 坑：PowerShell 5.1 按 GBK 解析无 BOM 的中文 ps1 报 UnexpectedToken（与下文既有条目同源），脚本需补 UTF-8 BOM；.NET 相对路径不跟随 Push-Location，读 APK 条目直接用 ZipFile。
+- 产物 `daodian-preview-jobpage-arm64.apk`：54,270,232 字节，包名 `dev.local.sign.demo`、版本 `1.8.1`/`42`（沿用基包）、仅 `arm64-v8a`、原签名证书 v2/v3、16 KB 对齐通过。字节码含「签到对象」「选择授权照片」「最近状态」「签到演练」「使用演练二维码」及 `_daodian_practice_course_`/`practice-enc-`。
+- SHA-256：`e96fe083528732536d115c27ca7a5f071ab3db0577aeab494c36803db6200a40`。真机验收待用户。
+- 登录闪退根因（真机 logcat 实锤）：基包 manifest 自始缺 `android.permission.INTERNET`，登录是首个网络请求，OkHttp 在 native 线程 DNS 解析抛 `SecurityException: Permission denied (missing INTERNET permission?)` 直接杀进程，JS 层无报错。与结果页/演练代码无关，历轮预览包均带此缺陷。
+- 已验证修复：`patch-manifest-internet.cjs` 对二进制 AndroidManifest.xml 做插入手术——字符串池追加 `android.permission.INTERNET`（UTF-16 池：偏移项 +4、stringsStart +4、chunk/XML size 同步），克隆现有 `uses-permission` 的 START/END 节点块（80 字节）仅改属性 rawValue/typedValue.data 为新串索引。注意 AXML 节点头 16 字节：元素名在 +20、attributeCount 在 +28、attributeStart 在 +24（按 +28 读名会误中属性串）。修复后 aapt2 badging/xmltree 见 INTERNET、`dumpsys package` granted=true、装机启动存活；真机登录复测待用户。基包备份 `out/preview-signed-nointernet.bak.apk`。
+- 诊断钩子教训：本 RN 版本 `ErrorUtils` 不是 `react-native` 的命名导出（import 得 undefined，钩子自身启动即崩）；要用 `globalThis.ErrorUtils`。且 release 包 JS 致命错误本就会进 logcat（AndroidRuntime/ReactNativeJS 带栈），弹窗钩子非必需。
+- 补权限后重打包产物 SHA-256：`ff6678ffe46bbc704701309b28ce6d5b61f9c4199af6e447b7a036976ed083e4`（54,270,232 字节，其余校验同上）。
+- 「连接不到学习通」根因二（真机 logcat + PREVIEW_API_ERROR 实锤）：预览 api（ae9cda6）调 `provider.activities`，而 read-only-activities.ts 覆盖副本漏了该包装函数 → TypeError 被 direct() 兜底文案「学习通请求失败」伪装成网络失败；登录走 auth.ts 不受影响。已补函数（照 HEAD 含 signStatus enrich）。教训：覆盖导出面必须与调用面逐名核对（diff export 列表），不能只核对 core 三件。
+- 根因三（正式版 1.8.3 同患，待用户确认修）：preSign 页 `var signstatus = 5`（页面自身 JS：1/2 灰=已签、5 红=结束未签、7/8/12 绿=疑似请假/豁免），attendanceState 只映射 0/1/2/3/9 → parseStatusPage 抛「远端签到状态未知」→ activities enrich 整表 reject。预览侧容错：单活动 PROVIDER_CHANGED 记 PREVIEW_STATUS_SKIP 后置 signed=null 不拖垮列表；sign-logged.ts 覆盖副本输出 PREVIEW_STATUS_RAW 原始值与页面片段取证。建议正式修复方向：readStatus 的列表回落 catch 扩到「远端签到状态未知」，按课程列表 status/endTime 判定 READY/EXPIRED，不猜新状态码语义。
+- 含上述修复产物 SHA-256：`5e30df8337d4b611ba84f817f4251f89431f936581675485b628d61262c30610`。真机已验证：登录成功、真实课程列表加载、演练活动页可达；演练签到→新结果页待用户截图验收。
+- 验收与收尾：用户真机确认新结果页效果后要求移除测试课程。已删脚手架内全部演练覆盖副本与覆盖机制（preview-transformer/preview.metro/read-only-activities/sign-logged/演练模块与 api/jobs/vault-core 旧副本），干净预览直接从正式树导出（正式树已含新结果页、无演练）；repack 脚本改为反向断言字节码不含 `practice-enc-`/「签到演练」/「使用演练二维码」（`_daodian_practice_course_` 常量正式保留于 vault-core，仅用于升级时隐藏旧测试记录，属合法残留）。脚手架仅保留重打包与 manifest 修补工具。
+
+## 2026-11-20 1.8.3 CI 发布与 CNB 同步排障
+
+- run 44736511752：mirror 三次 120s PUT 超时（跨境整段停滞），`rerun --failed` 换时段后成功。
+- run 44740691094（v1.8.3-build.27）：同样超时 → 上传放宽 600s、校验 300s（4fb01d7）。
+- run 44744452429：android 首试遇 Maven Central/Google 瞬时缺依赖（kotlin-gradle-plugins-bom 2.1.20、java-diff-utils 4.15、kotlin-stdlib 2.2.21），`rerun --failed` 通过，未改代码。
+- 同 run mirror 被 job 12 分钟上限杀死 → job 上限 30 分钟；单次尝试先改 240s+30s 退避，再改为 90s 无进度看门狗 + 420s 封顶（ddbc7e4）。
+- run 44750329534：mirror 报 `duplex option is required when sending a body`——undici 流式 body 必须 `duplex: 'half'`（883a83e）；推送前用本地 node http 服务验证流式 PUT 收满字节。
+- run 44753211986（v1.8.3-build.30）：mirror 三次尝试均跑满 420s 封顶——看门狗未触发，说明链路在动但晚高峰跨境带宽不足 7 分钟传完 41 MB；`rerun --failed` 重试（不产生新提交/新 tag）于当晚稍后成功，两源 update.json 均为 v1.8.3-build.30、APK 41,344,139 字节且 CNB HEAD 200。工作树已将单次封顶放宽到 900s、job 上限 55 分钟，随下一批提交。
+- 全程 CNB `updates` 分支保持上一次成功版本、GitHub Release 先行发布，用户侧无空窗。重跑/运行期间不推 main（并发取消 + head 校验）。
+
 ## 2026-11-20 首屏稳定性与真实登录测试 APK
 
 - 首轮类型检查报 TS2741，登录跳转占位页省略了必填的 children。补上空内容后，移动端类型检查和 158 项离线测试通过。
