@@ -5,6 +5,7 @@ import { ExpoGaodeMapModule, MapView, Marker, reGeocode, type MapViewRef } from 
 import { Text, XStack, YStack } from 'tamagui';
 import { locationSchema, type LocationInput } from '@sign/shared';
 import { FeedbackNotice, GlassInput, PrimaryButton, type FeedbackTone } from '../../ui';
+import { locationErrorMessage, locationPermissionMessage, locationTimeoutMessage } from './location-error';
 
 const DEFAULT_CENTER = { latitude: 39.9093, longitude: 116.3974 };
 const PRIVACY_VERSION = '2026-10-01';
@@ -14,7 +15,7 @@ async function getLocationWithTimeout() {
   try {
     return await Promise.race([
       ExpoGaodeMapModule.getCurrentLocation(),
-      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('定位超时，可直接在地图上选点')), 15000); }),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(locationTimeoutMessage)), 15000); }),
     ]);
   } finally { if (timer) clearTimeout(timer); }
 }
@@ -71,13 +72,13 @@ export function MapPicker({ visible, initial, onClose, onPick, embedded = false 
     try {
       const permission = await ExpoGaodeMapModule.requestLocationPermission();
       if (session.current !== opened) return;
-      if (!permission.granted) throw new Error('未开启定位权限，请在地图上选点，或在系统设置中允许定位');
+      if (!permission.granted) throw new Error(locationPermissionMessage);
       const current = await getLocationWithTimeout();
       if (session.current !== opened || request.current !== beforeLookup) return;
       const next = { latitude: current.latitude, longitude: current.longitude };
       void choose(next, opened);
     } catch (error) {
-      if (session.current === opened && request.current === beforeLookup) { setMessage(error instanceof Error ? error.message : '定位失败，可直接在地图上选点'); setMessageTone('error'); }
+      if (session.current === opened && request.current === beforeLookup) { setMessage(locationErrorMessage(error)); setMessageTone('error'); }
     }
   }
 

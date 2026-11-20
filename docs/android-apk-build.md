@@ -1,5 +1,11 @@
 # Android APK 构建记录（Windows）
 
+## 2026-11-21 高德定位鉴权修复包
+
+- 预览包与正式包使用同一份高德 Key 和 Android 签名，包名分别为 `dev.local.sign.demo` 与 `dev.local.sign.tool`。预览包被高德定位拒绝时，地图页显示可手动选点的短提示。
+- 首次重封装定位验证包报 `no arsc mapping`。Windows 的 Bun 隔离依赖布局给资源名加了路径前缀，正式 APK 来自扁平依赖布局。诊断入口只用原生控件并复用正式包资源。完整修复包按正式包命名校验 30 个导出资源，签名与 16 KB 对齐检查均通过。
+- 临时定位入口首次运行报 `Missing theme`，独立入口未加载应用完整主题上下文。改用 React Native 原生控件直接验证定位和地址查询。
+
 ## 2026-11-21 课程同步与资料恢复修复包
 
 - 首次导出在 Metro 读取 Bun 依赖中的 React Native `console.js` 时失败，报 `Failed to get the SHA-1`。文件已存在，Metro 的文件映射缺少该路径。导出进程用临时预加载脚本为仓库内已存在的文件补算 SHA-1，Expo 导出和 Hermes 编译均成功。
@@ -134,6 +140,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-android-apk.ps1
 | 从短盘符运行 Gradle 出现 `this and base files have different roots` 或 Metro 入口解析失败 | Gradle 使用短盘符，Node/Expo 又返回原始 `D:` 路径，形成跨盘符混用 | **Gradle 必须从原始 `D:\diandao-chaoxing\apps\mobile\android` 路径运行**；短盘符仅供 CMake 使用。 |
 | Gradle wrapper 下载失败，或 `--offline` 报缺少 AndroidX / 高德依赖 | 项目 `.tooling/gradle` 与用户目录 `.gradle` 是两份不同缓存；所需依赖在后者 | 脚本直接调用本机 Gradle 9.3.1，并令 `GRADLE_USER_HOME=$env:USERPROFILE\.gradle`。如依赖从未下载，需先联网补齐一次。 |
 | Windows PowerShell 5.1 在脚本开头报 `Unexpected token`，中文显示乱码 | 中文 `.ps1` 被保存为不带 BOM 的 UTF-8，PowerShell 5.1 按系统编码解码，部分字节被误识别为引号 | 保留 `scripts/build-android-apk.ps1` 的 UTF-8 BOM；恢复 BOM 后语法解析和构建启动均通过。 |
+| 高德定位返回 `INVALID_USER_SCODE` | APK 的包名或证书 SHA-1 与高德 Key 绑定的信息不匹配 | 正式包使用 `dev.local.sign.tool` 及其签名。改用 `dev.local.sign.demo` 等预览包名时，须在高德开放平台为实际包名和证书 SHA-1 配置独立的 Android Key，并重新构建。 |
 | `AMAP_ANDROID_KEY` 缺失 | 地图原生配置依赖 `apps/mobile/.env` | 确认本机 `.env` 中有非空 `AMAP_ANDROID_KEY`；此文件被 Git 忽略，不要写进文档或提交。 |
 
 ## 构建约束
