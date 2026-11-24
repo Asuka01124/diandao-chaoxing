@@ -108,11 +108,14 @@ export async function readActivityDetail(jar: RequestSession, activity: Activity
         : str(info.signOutId, "signOutId"),
     signOutPublishTime: stamp(info.signOutPublishTimeStamp),
   };
+  const numberCount = Number(info.numberCount);
+  const codeLength = Number.isInteger(numberCount) && numberCount >= 1 && numberCount <= 12 ? numberCount : undefined;
   return {
     ...activity,
     kind: clickOrPhoto ? (requirements.photo ? 'photo' : 'click') : detected,
     requirements,
     relation,
+    ...(codeLength ? { codeLength } : {}),
     startTime: stamp(info.starttime) ?? activity.startTime,
     endTime: stamp(info.endTime) ?? activity.endTime,
   };

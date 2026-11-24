@@ -110,8 +110,11 @@ export default function PrepareScreen() {
     if (activity.kind === 'click') return { kind: 'click', ...(location ? { location } : {}) };
     if (activity.kind === 'location') return { kind: 'location', ...location! };
     if (activity.kind === 'code') {
-      if (!/^\d{4,12}$/.test(code.trim())) throw new Error('请输入 4 至 12 位数字签到码。');
-      return { kind: 'code', code: code.trim(), ...(location ? { location } : {}) };
+      const trimmed = code.trim();
+      const expected = activity.codeLength;
+      const valid = expected ? new RegExp(`^\\d{${expected}}$`).test(trimmed) : /^\d{4,12}$/.test(trimmed);
+      if (!valid) throw new Error(expected ? `请输入 ${expected} 位数字签到码。` : '请输入 4 至 12 位数字签到码。');
+      return { kind: 'code', code: trimmed, ...(location ? { location } : {}) };
     }
     if (activity.kind === 'gesture') {
       if (gesture.length < 4) throw new Error('请按顺序选择至少 4 个不同的圆点。');
@@ -185,7 +188,7 @@ export default function PrepareScreen() {
     <MapPicker visible={mapOpen} initial={location} onClose={() => setMapOpen(false)} onPick={setLocation} />
 
     {activity.kind === 'code' && <><SectionTitle>签到码</SectionTitle>
-      <GroupedList><GlassInput accessibilityLabel="签到码" placeholder="4 至 12 位数字" value={code} onChangeText={setCode} keyboardType="number-pad" /></GroupedList>
+      <GroupedList><GlassInput accessibilityLabel="签到码" placeholder={activity.codeLength ? `${activity.codeLength} 位数字` : '4 至 12 位数字'} value={code} onChangeText={setCode} keyboardType="number-pad" /></GroupedList>
     </>}
 
     {activity.kind === 'gesture' && <><SectionTitle>手势签到</SectionTitle><GesturePatternPicker value={gesture} onChange={setGesture} /></>}

@@ -127,7 +127,7 @@ test("HTTP 登录错误根据原因给出操作提示，不展示响应原文", 
     [429, '操作太频繁了，请稍等一会儿再试', 'RATE_LIMITED', true],
     [401, '学习通登录已过期，请重新登录', 'SESSION_EXPIRED', false],
     [403, '学习通暂时不允许访问，请稍后再试', 'UNKNOWN', false],
-    [408, '连接学习通超时，请检查网络后重试', 'UNKNOWN', false],
+    [408, '连接学习通超时，请检查网络后重试', 'NETWORK_TIMEOUT', true],
     [400, '学习通未能处理这次请求，请稍后再试', 'UNKNOWN', false],
   ] as const;
   for (const [status, message, code, retryable] of cases) {

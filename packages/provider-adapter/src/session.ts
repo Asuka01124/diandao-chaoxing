@@ -152,9 +152,9 @@ export class RequestSession {
         if (detail) message = detail;
       }
       throw new ProviderError(
-        response.status === 401 ? "SESSION_EXPIRED" : response.status === 429 ? "RATE_LIMITED" : "UNKNOWN",
+        response.status === 401 ? "SESSION_EXPIRED" : response.status === 429 ? "RATE_LIMITED" : response.status === 408 ? "NETWORK_TIMEOUT" : "UNKNOWN",
         message,
-        response.status >= 500 || response.status === 429,
+        response.status >= 500 || response.status === 429 || response.status === 408,
       );
     }
     return response;

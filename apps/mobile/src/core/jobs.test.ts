@@ -6,8 +6,9 @@ let counter = 0;
 mock.module('expo-crypto', () => ({ randomUUID: () => `job-${++counter}` }));
 class FakeClientError extends Error { constructor(public code: string, message: string, public retryable = false) { super(message); } }
 const behavior = {
+  check: async (s: ProviderSession): Promise<ProviderSession> => s,
   submit: async (_id: string): Promise<SignStatus> => ({ state: 'READY' }),
-  status: async (_id: string): Promise<{ state: 'READY' | 'SIGNED' }> => ({ state: 'READY' }),
+  status: async (_id: string): Promise<SignStatus> => ({ state: 'READY' }),
   prepare: async (_id: string, _faceMediaId?: string): Promise<SignStatus | undefined> => undefined,
   upload: async (_id: string): Promise<{ mediaId: string }> => ({ mediaId: 'image' }),
 };
@@ -18,7 +19,7 @@ mock.module('./media', () => ({ readStagedPhoto: async (uri: string) => { readPh
 mock.module('./api', () => ({
   ClientError: FakeClientError,
   api: {
-    check: async (s: ProviderSession) => { providerCalls.push('check'); return s; },
+    check: async (s: ProviderSession) => { providerCalls.push('check'); return behavior.check(s); },
     status: async (s: ProviderSession) => { providerCalls.push('status'); return behavior.status(s.userId); },
     submit: async (s: ProviderSession, _activity: Activity, input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>, resolvePhoto?: () => Promise<string>) => {
       providerCalls.push('submit');
@@ -42,7 +43,7 @@ function store() {
   data.accounts = ['a', 'b'].map(id => ({ id, label: id, role: id === 'a' ? 'primary' as const : 'delegate' as const, session: session(id), authorizedAt: '', state: 'VALID' }));
   return { get: () => data, update: async (change: (value: VaultData) => void) => { const next = structuredClone(data); change(next); data = next; } };
 }
-beforeEach(() => { counter = 0; clearedPhotos.length = 0; readPhotos.length = 0; providerCalls.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.prepare = async () => undefined; behavior.upload = async () => ({ mediaId: 'image' }); });
+beforeEach(() => { counter = 0; clearedPhotos.length = 0; readPhotos.length = 0; providerCalls.length = 0; behavior.check = async s => s; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.prepare = async () => undefined; behavior.upload = async () => ({ mediaId: 'image' }); });
 
 test('旧测试课程的六种任务不会调用学习通接口', async () => {
   const state = store();
@@ -366,4 +367,48 @@ test('执行中重试失败账号会被执行器接住，队列清空才结束�
   expect(submitted).toEqual(['a', 'b', 'a']);
   expect(state.get().attempts.map(a => a.state)).toEqual(['SUCCESS', 'SUCCESS']);
   expect(state.get().jobs[0].state).toBe('DONE');
+});
+
+test('身份接口暂时不可用时用已有会话探活后继续签到', async () => {
+  const state = store();
+  behavior.check = async () => { throw new FakeClientError('UNKNOWN', '身份接口不可用', true); };
+  let probed = 0;
+  behavior.status = async () => { probed++; return { state: 'READY' }; };
+  behavior.submit = async () => ({ state: 'SIGNED', submitted: true });
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  await runJob(state, job.id);
+  expect(probed).toBe(1);
+  expect(state.get().attempts[0].state).toBe('SUCCESS');
+  expect(providerCalls).toContain('submit');
+});
+
+test('身份明确不符仍拦截，不发起签到', async () => {
+  const state = store();
+  behavior.check = async () => { throw new FakeClientError('REAUTH_REQUIRED', '登录账号身份不匹配'); };
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0].state).toBe('REAUTH_REQUIRED');
+  expect(providerCalls).not.toContain('submit');
+});
+
+test('身份接口不可用且会话已过期时要求重新登录', async () => {
+  const state = store();
+  behavior.check = async () => { throw new FakeClientError('NETWORK_TIMEOUT', '超时', true); };
+  behavior.status = async () => { throw new FakeClientError('SESSION_EXPIRED', '登录已过期'); };
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0].state).toBe('REAUTH_REQUIRED');
+  expect(providerCalls).not.toContain('submit');
+});
+
+test('待确认时活动已结束分别显示，不误报失败也不重复提交', async () => {
+  const state = store();
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  behavior.submit = async () => ({ state: 'WAITING_CONFIRMATION', message: '已提交，签到结果待确认' });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'WAITING_CONFIRMATION', count: 1 });
+  behavior.status = async () => ({ state: 'EXPIRED' });
+  await checkChallenge(state, job.id, 'a');
+  expect(state.get().attempts[0]).toMatchObject({ state: 'EXPIRED', count: 1, message: '活动已结束，个人签到结果仍未知（已提交）' });
+  await expect(retryAttempt(state, job.id, 'a')).rejects.toThrow('不能重试');
 });

@@ -11,7 +11,7 @@ export const signInputSchema = z.discriminatedUnion('kind', [
   locationSchema.extend({ kind: z.literal('location') }),
   z.object({ kind: z.literal('photo'), mediaIdByAccount: z.record(z.string(), z.string().min(1)), location: locationSchema.optional() }),
   z.object({ kind: z.literal('qr'), qrPayload: z.string().trim().min(1).max(2048), scannedAt: z.iso.datetime(), location: locationSchema.optional() }),
-  z.object({ kind: z.literal('code'), code: z.string().trim().regex(/^\d{4,12}$/), location: locationSchema.optional() }),
+  z.object({ kind: z.literal('code'), code: z.string().trim().regex(/^\d{1,12}$/), location: locationSchema.optional() }),
   z.object({ kind: z.literal('gesture'), sequence: z.string().regex(/^[1-9]{4,9}$/).refine(s => new Set(s).size === s.length), location: locationSchema.optional() }),
 ]);
 export type SignInput = z.infer<typeof signInputSchema>;
@@ -41,6 +41,7 @@ export const activitySchema = z.object({
   cachedAt: z.number().optional(),
   cacheAccountId: z.string().optional(),
   phase: z.enum(['sign-in', 'sign-out']).optional(),
+  codeLength: z.number().int().min(1).max(12).optional(),
   relation: z.object({ signInId: z.string().optional(), signOutId: z.string().optional(), signOutPublishTime: z.number().nullable() }).optional(),
   requirements: z.object({ captcha: z.boolean(), face: z.boolean(), location: z.boolean(), photo: z.boolean() }).optional(),
 });

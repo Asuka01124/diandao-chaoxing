@@ -38,6 +38,19 @@ async function refreshSession(store: VaultAccess, account: Account): Promise<Pro
   return session;
 }
 
+async function sessionForSign(store: VaultAccess, account: Account, activity: Activity): Promise<ProviderSession> {
+  try {
+    return await refreshSession(store, account);
+  } catch (error) {
+    const transient = error instanceof ClientError &&
+      (error.code === 'NETWORK_TIMEOUT' || error.code === 'RATE_LIMITED' || (error.code === 'UNKNOWN' && error.retryable));
+    if (!transient) throw error;
+    // 身份接口暂时不可用，但会话可能仍有效：用已有同账号会话查一次活动状态，由学习通响应决定是否续登。
+    await api.status(account.session, activity);
+    return account.session;
+  }
+}
+
 async function verifySubmission(store: VaultAccess, job: Job, accountId: string, session: ProviderSession): Promise<void> {
   const remote = await api.status(session, job.activity).catch(() => undefined);
   if (remote?.state === 'SIGNED') await setAttempt(store, job.id, accountId, 'SUCCESS');
@@ -71,7 +84,7 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
       return 'continue';
     }
     await setAttempt(store, job.id, accountId, recovering ? 'VERIFYING' : 'PREFLIGHT');
-    const session = await refreshSession(store, account);
+    const session = await sessionForSign(store, account, job.activity);
     if (recovering) {
       await verifySubmission(store, job, accountId, session);
       return 'continue';
@@ -241,11 +254,11 @@ export async function checkChallenge(store: VaultAccess, jobId: string, accountI
   if (result.state === 'SIGNED') {
     await setAttempt(store, jobId, accountId, 'SUCCESS', confirming ? undefined : '已在学习通完成验证');
     await runJob(store, jobId);
+  } else if (result.state === 'EXPIRED') {
+    await setAttempt(store, jobId, accountId, 'EXPIRED', confirming ? '活动已结束，个人签到结果仍未知（已提交）' : undefined);
+    await runJob(store, jobId);
   } else if (confirming) {
     throw new Error('学习通暂未确认签到，请稍后再检查');
-  } else if (result.state === 'EXPIRED') {
-    await setAttempt(store, jobId, accountId, 'EXPIRED');
-    await runJob(store, jobId);
   } else {
     throw new Error('学习通仍显示未签到，请完成验证和签到');
   }

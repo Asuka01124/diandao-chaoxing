@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Activity, ProviderSession } from '@sign/shared';
+import { signInputSchema } from '@sign/shared';
 import { ProviderError, RequestSession, activities, activityDetail, checkSession, parseQrPayload, parseStatusPage, parseSubmitResponse, submit, uploadPhoto, withProviderDeadline } from './index';
 
 const session = (name: string): ProviderSession => ({ identifier: name, encryptedPassword: 'secret', cookies: [{ name: 'fid', value: name, domain: 'chaoxing.com', path: '/' }], userId: name, fid: '0', name, deviceCode: 'device' });
@@ -84,6 +85,18 @@ describe('第三方响应解析', () => {
     expect(detail.kind).toBe('photo');
     expect(detail.relation?.signOutId).toBe('456');
   });
+  test('活动详情解析签到码位数，缺配置时不写死', async () => {
+    const detail = await activityDetail(session('a'), { ...activity, kind: 'code' }, async () => Response.json({ data: { otherId: 5, numberCount: 3 } }));
+    expect(detail.kind).toBe('code');
+    expect(detail.codeLength).toBe(3);
+    const none = await activityDetail(session('a'), { ...activity, kind: 'code' }, async () => Response.json({ data: { otherId: 5 } }));
+    expect(none.codeLength).toBeUndefined();
+  });
+  test('签到码 schema 放行活动配置的短码，仍拒绝超长', () => {
+    expect(signInputSchema.safeParse({ kind: 'code', code: '123' }).success).toBe(true);
+    expect(signInputSchema.safeParse({ kind: 'code', code: '1234567890123' }).success).toBe(false);
+    expect(signInputSchema.safeParse({ kind: 'code', code: '12a4' }).success).toBe(false);
+  });
   test('人脸要求必须取得第三方校验参数后才提交', async () => {
     let signed = false; const paths: string[] = [];
     const transport = async (url: string) => {
@@ -126,6 +139,9 @@ describe('账号隔离与上传', () => {
     expect(hops).toBe(5);
     await expect(new RequestSession(session('a'), async () => new Response('', { status: 302, headers: { location: 'https://mobilelearn.chaoxing.com/loop' } })).request('https://mobilelearn.chaoxing.com/loop')).rejects.toMatchObject({ code: 'PROVIDER_CHANGED' });
     await expect(new RequestSession(session('a'), async () => new Response('', { status: 302, headers: { location: 'https://evil.example/x' } })).request('https://mobilelearn.chaoxing.com/x')).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  });
+  test('HTTP 408 归类为可重试超时，文案与归类一致', async () => {
+    await expect(new RequestSession(session('a'), async () => new Response('', { status: 408 })).request('https://mobilelearn.chaoxing.com/x')).rejects.toMatchObject({ code: 'NETWORK_TIMEOUT', retryable: true });
   });
   test('照片按会话上传，返回媒体 ID', async () => {
     const jpg = Buffer.from([0xff, 0xd8, ...Array(120).fill(0), 0xff, 0xd9]).toString('base64');
