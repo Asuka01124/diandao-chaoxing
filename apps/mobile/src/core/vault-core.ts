@@ -43,6 +43,19 @@ export class EncryptedVault {
       const removedJobIds = new Set(data.jobs.filter(job => isDemoCourse(job.activity.courseId) || isPracticeCourse(job.activity.courseId)).map(job => job.id));
       data.jobs = data.jobs.filter(job => !removedJobIds.has(job.id));
       data.attempts = data.attempts.filter(attempt => !removedJobIds.has(attempt.jobId));
+      // 旧版在已提交但一次核验仍未签到时，把该账号写成了失败。
+      const awaitingConfirmation = new Set<string>();
+      for (const attempt of data.attempts) {
+        if (attempt.state !== 'FAILED' || attempt.count === 0 || attempt.code !== 'PROVIDER_CHANGED' ||
+          attempt.message !== '学习通仍显示未签到，请检查活动要求后重试') continue;
+        attempt.state = 'WAITING_CONFIRMATION';
+        attempt.message = '已提交，签到结果待确认';
+        delete attempt.code;
+        awaitingConfirmation.add(attempt.jobId);
+      }
+      for (const job of data.jobs) {
+        if (job.state === 'DONE' && awaitingConfirmation.has(job.id)) job.state = 'WAITING';
+      }
       data.activityCache = (data.activityCache ?? []).filter(activity => !isDemoCourse(activity.courseId) && !isPracticeCourse(activity.courseId));
       return { ...data, schemaVersion: 2 };
     } catch { throw new Error('加密文件校验失败，无法读取任何账号资料'); }

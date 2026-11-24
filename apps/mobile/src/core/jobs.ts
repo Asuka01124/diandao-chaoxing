@@ -1,10 +1,11 @@
 import { randomUUID } from 'expo-crypto';
-import { validateActivityInput, type Account, type Activity, type AttemptState, type Job, type SignInput, type VaultData } from '@sign/shared';
+import { signInputSchema, validateActivityInput, type Account, type Activity, type AttemptState, type Job, type ProviderSession, type SignInput, type VaultData } from '@sign/shared';
 import { api, ClientError } from './api';
 import { isDemoActivity } from '../features/courses/demo-course';
 
 export type VaultAccess = { get: () => VaultData; update: (change: (data: VaultData) => void) => Promise<void> };
 const terminal: AttemptState[] = ['SUCCESS', 'ALREADY_SIGNED', 'REAUTH_REQUIRED', 'EXPIRED', 'FAILED'];
+const confirmationMessage = '提交状态待确认，请检查签到结果';
 
 export async function createJob(store: VaultAccess, activity: Activity, accountIds: string[], input: SignInput, photoUri?: string): Promise<Job> {
   validateActivityInput(activity, input);
@@ -27,53 +28,71 @@ async function setAttempt(store: VaultAccess, jobId: string, accountId: string, 
   });
 }
 function accountFor(store: VaultAccess, id: string): Account | undefined { return store.get().accounts.find(a => a.id === id); }
+
+async function refreshSession(store: VaultAccess, account: Account): Promise<ProviderSession> {
+  const session = await api.check(account.session);
+  await store.update(data => {
+    const saved = data.accounts.find(item => item.id === account.id);
+    if (saved) { saved.session = session; saved.state = 'VALID'; saved.verifiedAt = new Date().toISOString(); }
+  });
+  return session;
+}
+
+async function verifySubmission(store: VaultAccess, job: Job, accountId: string, session: ProviderSession): Promise<void> {
+  const remote = await api.status(session, job.activity).catch(() => undefined);
+  if (remote?.state === 'SIGNED') await setAttempt(store, job.id, accountId, 'SUCCESS');
+  else await setAttempt(store, job.id, accountId, 'WAITING_CONFIRMATION', confirmationMessage);
+}
+
+async function uploadSignPhoto(store: VaultAccess, jobId: string, accountId: string, session: ProviderSession): Promise<string> {
+  const job = store.get().jobs.find(item => item.id === jobId);
+  if (!job?.photoUri) throw new ClientError('INVALID_INPUT', '照片已丢失，请重新选择');
+  const { readStagedPhoto } = await import('./media');
+  const photo = await readStagedPhoto(job.photoUri).catch(error => {
+    throw new ClientError('INVALID_INPUT', error instanceof Error ? error.message : '无法读取照片，请重新选择');
+  });
+  const { mediaId } = await api.upload(session, photo);
+  await store.update(data => {
+    const saved = data.jobs.find(item => item.id === jobId);
+    if (saved?.input.kind === 'photo') saved.input.mediaIdByAccount[accountId] = mediaId;
+  });
+  return mediaId;
+}
 async function executeAccount(store: VaultAccess, job: Job, accountId: string): Promise<'continue' | 'wait'> {
   const account = accountFor(store, accountId);
   if (!account) { await setAttempt(store, job.id, accountId, 'FAILED', '账号已删除', 'INVALID_INPUT'); return 'continue'; }
   const previousAttempt = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId);
-  const previous = previousAttempt?.state;
+  const recovering = previousAttempt?.state === 'SUBMITTING' || previousAttempt?.state === 'VERIFYING';
   let requestStarted = false;
   try {
     if (isDemoActivity(job.activity)) {
       await setAttempt(store, job.id, accountId, 'FAILED', '旧测试课程已移除，未向学习通提交', 'INVALID_INPUT');
       return 'continue';
     }
-    await setAttempt(store, job.id, accountId, 'PREFLIGHT');
-    const session = await api.check(account.session);
-    await store.update(data => { const item = data.accounts.find(a => a.id === accountId); if (item) { item.session = session; item.state = 'VALID'; item.verifiedAt = new Date().toISOString(); } });
-    // 已发送过的任务恢复时先核查；新任务的检查统一由 submit 完成。
-    if ((previousAttempt?.count ?? 0) > 0 || previous === 'SUBMITTING' || previous === 'VERIFYING') {
-      const before = await api.status(session, job.activity);
-      if (before.state === 'SIGNED') { await setAttempt(store, job.id, accountId, 'SUCCESS'); return 'continue'; }
-      if (before.state === 'EXPIRED') { await setAttempt(store, job.id, accountId, 'EXPIRED'); return 'continue'; }
+    await setAttempt(store, job.id, accountId, recovering ? 'VERIFYING' : 'PREFLIGHT');
+    const session = await refreshSession(store, account);
+    if (recovering) {
+      await verifySubmission(store, job, accountId, session);
+      return 'continue';
     }
     if (!accountFor(store, accountId)) return 'continue';
-    let photoMediaId: string | undefined;
-    if (job.input.kind === 'photo') {
-      const current = store.get().jobs.find(j => j.id === job.id);
-      photoMediaId = current?.input.kind === 'photo' ? current.input.mediaIdByAccount[accountId] : undefined;
-      if (!photoMediaId) {
-        if (!job.photoUri) throw new Error('照片已丢失，请重新选择');
-        const { readStagedPhoto } = await import('./media');
-        photoMediaId = (await api.upload(session, await readStagedPhoto(job.photoUri))).mediaId;
-        const savedId = photoMediaId;
-        await store.update(data => { const item = data.jobs.find(j => j.id === job.id); if (item?.input.kind === 'photo') item.input.mediaIdByAccount[accountId] = savedId; });
-      }
-    }
-    if (!accountFor(store, accountId)) return 'continue';
+    const savedMediaId = job.input.kind === 'photo' ? job.input.mediaIdByAccount[accountId] : undefined;
+    const input = job.input.kind === 'photo'
+      ? { ...job.input, mediaIdByAccount: savedMediaId ? { [session.userId]: savedMediaId } : {} }
+      : job.input;
+    const resolvePhoto = input.kind === 'photo' ? () => uploadSignPhoto(store, job.id, accountId, session) : undefined;
     let result;
     try {
-      const input = job.input.kind === 'photo' ? { ...job.input, mediaIdByAccount: { [session.userId]: photoMediaId! } } : job.input;
       result = await api.submit(session, job.activity, input, job.faceMediaIdByAccount?.[accountId], async () => {
+        if (!accountFor(store, accountId)) throw new ClientError('INVALID_INPUT', '账号已删除');
         await setAttempt(store, job.id, accountId, 'SUBMITTING');
         requestStarted = true;
-      });
-    }
-    catch (error) {
-      if (requestStarted && error instanceof ClientError && error.code === 'NETWORK_TIMEOUT') {
-        await setAttempt(store, job.id, accountId, 'VERIFYING', '提交超时，正在确认是否已签到');
-        const remote = await api.status(session, job.activity);
-        if (remote.state === 'SIGNED') { await setAttempt(store, job.id, accountId, 'SUCCESS'); return 'continue'; }
+      }, resolvePhoto);
+    } catch (error) {
+      if (requestStarted && error instanceof ClientError && (error.code === 'NETWORK_TIMEOUT' || (error.code === 'UNKNOWN' && error.retryable))) {
+        await setAttempt(store, job.id, accountId, 'VERIFYING', confirmationMessage);
+        await verifySubmission(store, job, accountId, session);
+        return 'continue';
       }
       throw error;
     }
@@ -83,14 +102,22 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
     }
     if (result.state === 'EXPIRED') { await setAttempt(store, job.id, accountId, 'EXPIRED'); return 'continue'; }
     if (result.state === 'SIGNED') {
-      await setAttempt(store, job.id, accountId, result.submitted ? 'SUCCESS' : 'ALREADY_SIGNED');
+      await setAttempt(store, job.id, accountId, result.submitted || (previousAttempt?.count ?? 0) > 0 ? 'SUCCESS' : 'ALREADY_SIGNED');
       return 'continue';
     }
-    await setAttempt(store, job.id, accountId, 'FAILED', '学习通仍显示未签到，请检查活动要求后重试', 'PROVIDER_CHANGED');
+    if (result.state === 'WAITING_CONFIRMATION' || (result.state === 'READY' && requestStarted)) {
+      await setAttempt(store, job.id, accountId, 'WAITING_CONFIRMATION', result.message ?? confirmationMessage);
+    } else {
+      await setAttempt(store, job.id, accountId, 'FAILED', '学习通仍显示未签到，请检查活动要求后重试', 'PROVIDER_CHANGED');
+    }
   } catch (error) {
+    if (recovering) {
+      await setAttempt(store, job.id, accountId, 'WAITING_CONFIRMATION', confirmationMessage);
+      return 'continue';
+    }
     const client = error instanceof ClientError ? error : undefined;
     const state: AttemptState = client?.code === 'REAUTH_REQUIRED' || client?.code === 'SESSION_EXPIRED' ? 'REAUTH_REQUIRED'
-      : client?.code === 'QR_EXPIRED' ? 'WAITING_QR' : client?.code === 'VALIDATION_FAILED' && job.faceMediaIdByAccount?.[accountId] ? 'WAITING_FACE' : client?.code === 'ACTIVITY_NOT_FOUND' ? 'EXPIRED' : 'FAILED';
+      : client?.code === 'QR_EXPIRED' ? 'WAITING_QR' : client?.code === 'VALIDATION_FAILED' && job.faceMediaIdByAccount?.[accountId] ? 'WAITING_FACE' : 'FAILED';
     if (state === 'REAUTH_REQUIRED') await store.update(data => { const item = data.accounts.find(a => a.id === accountId); if (item) item.state = 'REAUTH_REQUIRED'; });
     const phase = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId)?.state;
     const message = client?.message ?? '执行失败';
@@ -121,7 +148,7 @@ export async function runJob(store: VaultAccess, jobId: string): Promise<void> {
       const attempt = store.get().attempts.find(a => a.jobId === jobId && a.accountId === accountId);
       if (!attempt || terminal.includes(attempt.state)) continue;
       if (attempt.state === 'WAITING_QR') { await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'WAITING'; }); return; }
-      if (attempt.state === 'WAITING_CAPTCHA' || attempt.state === 'WAITING_FACE') continue;
+      if (attempt.state.startsWith('WAITING_')) continue;
       if (await executeAccount(store, job, accountId) === 'wait') { await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'WAITING'; }); return; }
     }
     await store.update(data => {
@@ -144,8 +171,7 @@ export async function cleanupCompletedPhoto(store: VaultAccess, jobId: string): 
   await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.photoUri = undefined; });
 }
 export async function replaceQrAndResume(store: VaultAccess, jobId: string, qrPayload: string, scannedAt: string): Promise<void> {
-  const age = Date.now() - Date.parse(scannedAt);
-  if (!Number.isFinite(age) || age > 120_000 || age < -30_000) throw new Error('二维码扫描时间无效或已过期，请重新扫描');
+  if (!signInputSchema.safeParse({ kind: 'qr', qrPayload, scannedAt }).success) throw new Error('二维码扫描信息无效，请重新扫描');
   await store.update(data => {
     const job = data.jobs.find(j => j.id === jobId);
     if (!job || job.input.kind !== 'qr' || !data.attempts.some(a => a.jobId === jobId && a.state === 'WAITING_QR')) throw new Error('当前任务无需重新扫码');
@@ -159,8 +185,7 @@ export async function retryAttempt(store: VaultAccess, jobId: string, accountId:
   const attempt = store.get().attempts.find(a => a.jobId === jobId && a.accountId === accountId);
   if (!attempt || !['FAILED', 'REAUTH_REQUIRED'].includes(attempt.state)) throw new Error('该账号当前不能重试');
   if (attempt.state === 'REAUTH_REQUIRED' && accountFor(store, accountId)?.state !== 'VALID') throw new Error('请先重新登录该账号');
-  const job = store.get().jobs.find(j => j.id === jobId);
-  if (job?.input.kind === 'photo' && !job.input.mediaIdByAccount[accountId] && !job.photoUri) throw new Error('临时照片已清理，请重新选择');
+  if (attempt.code === 'SIGN_INPUT_CHANGED') throw new Error('请重新准备签到');
   await setAttempt(store, jobId, accountId, 'QUEUED');
   await runJob(store, jobId);
 }
@@ -180,11 +205,25 @@ export async function checkChallenge(store: VaultAccess, jobId: string, accountI
   const job = store.get().jobs.find(j => j.id === jobId);
   const account = accountFor(store, accountId);
   const attempt = store.get().attempts.find(a => a.jobId === jobId && a.accountId === accountId);
-  if (!job || !account || !attempt || !['WAITING_CAPTCHA', 'WAITING_FACE'].includes(attempt.state)) throw new Error('当前账号没有待处理的验证');
-  const result = await api.status(account.session, job.activity);
-  if (result.state === 'SIGNED') { await setAttempt(store, jobId, accountId, 'SUCCESS', '已在学习通完成验证'); await runJob(store, jobId); }
-  else if (result.state === 'EXPIRED') { await setAttempt(store, jobId, accountId, 'EXPIRED'); await runJob(store, jobId); }
-  else throw new Error('学习通仍显示未签到，请完成验证和签到');
+  if (!job || !account || !attempt || !['WAITING_CAPTCHA', 'WAITING_FACE', 'WAITING_CONFIRMATION'].includes(attempt.state)) {
+    throw new Error('当前账号没有待核查的签到');
+  }
+  const confirming = attempt.state === 'WAITING_CONFIRMATION';
+  const result = await api.status(account.session, job.activity).catch(async error => {
+    if (!(error instanceof ClientError) || error.code !== 'SESSION_EXPIRED') throw error;
+    return api.status(await refreshSession(store, account), job.activity);
+  });
+  if (result.state === 'SIGNED') {
+    await setAttempt(store, jobId, accountId, 'SUCCESS', confirming ? undefined : '已在学习通完成验证');
+    await runJob(store, jobId);
+  } else if (confirming) {
+    throw new Error('学习通暂未确认签到，请稍后再检查');
+  } else if (result.state === 'EXPIRED') {
+    await setAttempt(store, jobId, accountId, 'EXPIRED');
+    await runJob(store, jobId);
+  } else {
+    throw new Error('学习通仍显示未签到，请完成验证和签到');
+  }
 }
 export async function provideFaceAndResume(store: VaultAccess, jobId: string, accountId: string, mediaId: string): Promise<void> {
   await store.update(data => {

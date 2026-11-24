@@ -115,6 +115,30 @@ test('升级后旧演练活动和任务不再出现在正式数据中', async ()
   expect(loaded.attempts.map(attempt => attempt.jobId)).toEqual(['real-job']);
 });
 
+test('旧版已提交却被判失败的记录恢复为待确认，明确拒绝和零提交保持原状态', async () => {
+  const vault = new EncryptedVault(ports);
+  const data = emptyVault();
+  const activity: Activity = {
+    id: 'a', courseId: 'course', classId: 'class', title: '签到', source: 'course',
+    kind: 'click', startTime: null, endTime: null, signed: null, ext: '{}',
+  };
+  data.jobs = [{ id: 'job', activity, input: { kind: 'click' }, accountIds: ['a', 'b', 'c'], createdAt: '', state: 'DONE' }];
+  const failure = { jobId: 'job', state: 'FAILED' as const, updatedAt: '', code: 'PROVIDER_CHANGED', message: '学习通仍显示未签到，请检查活动要求后重试' };
+  data.attempts = [
+    { ...failure, accountId: 'a', count: 1 },
+    { ...failure, accountId: 'b', count: 1, message: '学习通返回：教师已结束本次活动' },
+    { ...failure, accountId: 'c', count: 0 },
+  ];
+
+  await vault.write(data);
+  const migrated = await vault.read();
+  expect(migrated.jobs[0].state).toBe('WAITING');
+  expect(migrated.attempts[0]).toMatchObject({ state: 'WAITING_CONFIRMATION', count: 1 });
+  expect(migrated.attempts.slice(1)).toEqual(data.attempts.slice(1));
+  await vault.write(migrated);
+  expect(await vault.read()).toEqual(migrated);
+});
+
 test.each([false, true])('首次保存中断后可重新保存账号（残留临时文件：%s）', async leavesPartialFile => {
   const interruptedVault = new EncryptedVault({
     ...ports,

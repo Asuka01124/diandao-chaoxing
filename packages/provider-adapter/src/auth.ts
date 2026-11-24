@@ -138,6 +138,7 @@ export async function checkSession(
     if (
       error instanceof ProviderError &&
       error.code !== "PROVIDER_CHANGED" &&
+      error.code !== "SESSION_EXPIRED" &&
       error.code !== "REAUTH_REQUIRED"
     )
       throw error;

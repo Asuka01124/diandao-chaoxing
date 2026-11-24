@@ -9,6 +9,7 @@ export class ClientError extends Error {
 async function direct<T>(operation: () => Promise<T>): Promise<T> {
   try { return await operation(); }
   catch (error) {
+    if (error instanceof ClientError) throw error;
     if (error instanceof provider.ProviderError) throw new ClientError(error.code, error.message, error.retryable);
     throw new ClientError('UNKNOWN', '学习通请求失败，请稍后重试', true);
   }
@@ -25,9 +26,9 @@ export const api = {
   detail: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
     ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不读取学习通详情'))
     : direct(() => provider.activityDetail(session, activity)),
-  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>) => isDemoActivity(activity)
+  submit: (session: ProviderSession, activity: Activity, input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>, resolvePhoto?: () => Promise<string>) => isDemoActivity(activity)
     ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动不可提交到学习通'))
-    : direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId, onSubmit)),
+    : direct<SignStatus>(() => provider.submit(session, activity, input, undefined, faceMediaId, onSubmit, resolvePhoto)),
   status: (session: ProviderSession, activity: Activity) => isDemoActivity(activity)
     ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动没有学习通签到状态'))
     : direct<SignStatus>(() => provider.signStatus(session, activity)),

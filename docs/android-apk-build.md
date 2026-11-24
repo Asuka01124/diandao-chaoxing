@@ -1,5 +1,9 @@
 # Android APK 构建记录（Windows）
 
+## 2026-11-24 签到流程修复验证
+
+- 离线导出 Android bundle 时，Metro 报 `Failed to get the SHA-1`，最早缺失的是 Bun 依赖目录中 React Native `js-polyfills/console.js` 的索引。文件存在。按既有方案从仓库真实路径启动 Expo，并临时预加载仓库内文件的 SHA-1 计算脚本，Android bundle 和 Hermes 字节码均成功导出。
+
 ## 2026-11-21 高德定位鉴权修复包
 
 - 预览包与正式包使用同一份高德 Key 和 Android 签名，包名分别为 `dev.local.sign.demo` 与 `dev.local.sign.tool`。预览包被高德定位拒绝时，地图页显示可手动选点的短提示。

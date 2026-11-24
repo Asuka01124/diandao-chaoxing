@@ -123,7 +123,7 @@ export class RequestSession {
     }
     this.saveCookies(parsed, response);
     if (response.status >= 300 && response.status < 400) {
-      if (redirects >= 3)
+      if (redirects >= 5)
         throw new ProviderError("PROVIDER_CHANGED", "第三方重定向次数异常");
       const location = response.headers.get("location");
       if (!location)
@@ -152,7 +152,7 @@ export class RequestSession {
         if (detail) message = detail;
       }
       throw new ProviderError(
-        response.status === 429 ? "RATE_LIMITED" : "UNKNOWN",
+        response.status === 401 ? "SESSION_EXPIRED" : response.status === 429 ? "RATE_LIMITED" : "UNKNOWN",
         message,
         response.status >= 500 || response.status === 429,
       );

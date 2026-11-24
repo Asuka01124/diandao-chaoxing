@@ -11,6 +11,11 @@ test('部分失败、全部成功和已截止有独立的结果文案', () => {
   expect(jobResult(job, [{ accountId: 'a', state: 'SUCCESS' }, { accountId: 'b', state: 'ALREADY_SIGNED' }]).success).toBe(true);
   expect(jobResult(job, [{ accountId: 'a', state: 'EXPIRED' }, { accountId: 'b', state: 'EXPIRED' }])).toMatchObject({ title: '签到已结束', success: false, needsAttention: false });
 });
+test('已提交的待确认状态不标记为失败或成功', () => {
+  expect(jobResult({ state: 'WAITING', accountIds: ['a'] }, [{ accountId: 'a', state: 'WAITING_CONFIRMATION' }])).toMatchObject({
+    title: '签到结果待确认', label: '待确认', success: false, needsAttention: true,
+  });
+});
 test('等待输入或缺少账号结果时不能报告全部已签到', () => {
   expect(jobResult({ state: 'WAITING', accountIds: ['a'] }, [{ accountId: 'a', state: 'WAITING_FACE' }]).title).toBe('需要你继续处理');
   expect(jobResult({ state: 'DONE', accountIds: ['a', 'b'] }, [{ accountId: 'a', state: 'SUCCESS' }]).success).toBe(false);

@@ -1,5 +1,5 @@
 import {
-  validateActivityInput,
+  signInputSchema,
   type Activity,
   type LocationInput,
   type ProviderSession,
@@ -54,7 +54,7 @@ export function parseStatusPage(page: string): SignStatus {
   const record = attendanceRecord(page);
   const marker = page.match(/\bsignstatus\b["']?\s*[:=]\s*(?:(["'])(-?\d+)\1|(-?\d+)(?![\w.]))/i);
   const value = record && 'status' in record ? record.status : marker?.[2] ?? marker?.[3];
-  const state = attendanceState(value);
+  const state = attendanceState(record?.status) ?? attendanceState(marker?.[2] ?? marker?.[3]);
   if (state === 'SIGNED') return { state };
   if (page.includes('下次早点哦')) return { state: 'EXPIRED' };
   if (value === undefined) {
@@ -100,7 +100,7 @@ async function readStatus(
   try { return parseStatusPage(page); }
   catch (error) {
     if (!(error instanceof ProviderError) || activity.source !== 'course' ||
-      !(error.code === 'NOT_MEMBER' || (error.code === 'PROVIDER_CHANGED' && error.message === '无法确认远端签到状态'))) throw error;
+      (error.code !== 'NOT_MEMBER' && error.code !== 'PROVIDER_CHANGED')) throw error;
 
     // 预签到 HTML 不一定携带状态；使用同一账号的课程列表，按活动 ID 精确核查。
     const list = await readCourseActivities(client, activity.courseId, activity.classId);
@@ -111,11 +111,11 @@ async function readStatus(
       const refreshed = await requestStatusPage(client, account, { ...activity, ext: current.ext });
       try { return parseStatusPage(refreshed); }
       catch (next) {
-        if (!(next instanceof ProviderError) || next.code !== 'PROVIDER_CHANGED' || next.message !== '无法确认远端签到状态') throw next;
+        if (!(next instanceof ProviderError) || next.code !== 'PROVIDER_CHANGED') throw next;
       }
     } else if (error.code === 'NOT_MEMBER') throw error;
 
-    if ((current.status != null && current.status !== 1) || (current.endTime != null && current.endTime <= Date.now())) return { state: 'EXPIRED' };
+    if (current.status === 2) return { state: 'EXPIRED', attendanceUnconfirmed: true };
     if (current.status === 1) return { state: 'READY' };
     throw new ProviderError('PROVIDER_CHANGED', '课程活动列表未提供可确认的签到状态，请刷新活动');
   }
@@ -128,8 +128,9 @@ async function establishSignContext(client: RequestSession, activityId: string):
     aid: activityId,
   });
   const page = await (await client.request(first.href)).text();
-  const token = page.split("code='+'", 2)[1]?.split("'", 1)[0];
-  if (!token || !/^[a-f0-9]+$/i.test(token)) {
+  // 页面是 JS 拼接 '…code=' + '<hex>'，锚定语义上的 code= 并容忍引号/空格/拼接方式漂移。
+  const token = page.match(/code\s*=\s*['"]?\s*\+?\s*['"]?\s*([a-f0-9]+)/i)?.[1];
+  if (!token) {
     throw new ProviderError('PROVIDER_CHANGED', '第三方预签到确认参数已变化');
   }
   await client.request(apiUrl('/pptSign/analysis2', {
@@ -148,15 +149,12 @@ export function signStatus(
 
 export function parseSubmitResponse(response: string): SignStatus {
   const message = response.trim();
-  switch (message) {
-    case 'success':
-      return { state: 'READY', message: '第三方已接受提交，仍需核验' };
-    case '您已签到过了':
-      return { state: 'SIGNED' };
-    case 'success2':
-      return { state: 'EXPIRED' };
-    case '签到失败，请重新扫描。':
-      throw new ProviderError('QR_EXPIRED', '二维码已过期');
+  if (message === '您已签到过了') return { state: 'SIGNED' };
+  if (message === 'success2') return { state: 'EXPIRED' };
+  if (message === '签到失败，请重新扫描。') throw new ProviderError('QR_EXPIRED', '二维码已过期');
+  // 成功响应可能是 success 或中文「签到成功」，容忍首尾标点；仍交由个人结果核验，不直接判定成功。
+  if (/^(?:success|签到成功)[。！!.]?$/i.test(message)) {
+    return { state: 'READY', message: '第三方已接受提交，仍需核验' };
   }
   if (message.startsWith('validate')) return { state: 'WAITING_CAPTCHA' };
   const detail = responseMessage(message);
@@ -201,25 +199,25 @@ async function assertCurrentQr(client: RequestSession, activityId: string, code?
     type: '1',
     msg: code,
   }).href;
-  const unavailableMessage = '暂时无法确认二维码状态，请重试';
   const canRetry = (error: unknown): error is ProviderError =>
     error instanceof ProviderError && error.retryable && error.code !== 'RATE_LIMITED' && !getOperationSignal()?.aborted;
 
-  const reply = await client.request(url).catch((error: unknown) => {
-    if (canRetry(error)) return client.request(url);
-    throw error;
-  }).catch((error: unknown) => {
-    if (canRetry(error)) throw new ProviderError(error.code, unavailableMessage, true);
-    throw error;
-  });
-  const { isOver, signCode } = await json(reply).catch(() => {
-    throw new ProviderError('PROVIDER_CHANGED', unavailableMessage);
-  });
+  // 校验接口只为提前发现明确过期；无法确认时不拦截，交由正式提交裁决有效性。
+  let reply: Response;
+  try {
+    reply = await client.request(url).catch((error: unknown) => {
+      if (canRetry(error)) return client.request(url);
+      throw error;
+    });
+  } catch { return; }
+  const data = await json(reply).catch(() => undefined);
+  if (!data) return;
+  const { isOver, signCode } = data;
   const currentCode = typeof signCode === 'number' && Number.isSafeInteger(signCode) ? String(signCode) : signCode;
-  if (isOver == null || typeof currentCode !== 'string' || !currentCode.trim()) {
-    throw new ProviderError('PROVIDER_CHANGED', unavailableMessage);
+  if (isOver != null && Number(isOver) === 1) {
+    throw new ProviderError('QR_EXPIRED', '动态二维码已过期，请重新扫描');
   }
-  if (Number(isOver) === 1 || currentCode !== code) {
+  if (typeof currentCode === 'string' && currentCode.trim() && currentCode !== code) {
     throw new ProviderError('QR_EXPIRED', '动态二维码已过期，请重新扫描');
   }
 }
@@ -306,18 +304,10 @@ async function submissionUrl(
       query.set('objectId', mediaId);
       break;
     }
-    case 'qr': {
-      const elapsed = Date.now() - Date.parse(input.scannedAt);
-      if (!Number.isFinite(elapsed) || elapsed > 120_000 || elapsed < -30_000) {
-        throw new ProviderError('QR_EXPIRED', '二维码扫描时间无效或已过期');
-      }
-      const parsed = parseQrPayload(input.qrPayload, activity.id);
-      await assertCurrentQr(client, activity.id, parsed.code);
-      query.set('enc', parsed.enc);
+    case 'qr':
       query.set('vpProbability', '-1');
       query.set('vpStrategy', '');
       break;
-    }
   }
 
   if (faceMediaId) {
@@ -334,24 +324,24 @@ async function submissionUrl(
 export async function submit(
   account: ProviderSession,
   activity: Activity,
-  input: SignInput,
+  preparedInput: SignInput,
   transport?: Transport,
   faceMediaId?: string,
   onSubmit?: () => void | Promise<void>,
+  resolvePhoto?: () => Promise<string>,
 ): Promise<SignStatus> {
-  try {
-    validateActivityInput(activity, input);
-  } catch {
-    throw new ProviderError('INVALID_INPUT', '输入不符合活动要求');
-  }
+  const parsedInput = signInputSchema.safeParse(preparedInput);
+  if (!parsedInput.success) throw new ProviderError('INVALID_INPUT', '输入不符合活动要求');
+  let input = parsedInput.data;
+  const qr = input.kind === 'qr' ? parseQrPayload(input.qrPayload, activity.id) : undefined;
 
   const client = new RequestSession(account, transport);
   const context = { ...activity };
   const prior = await readStatus(client, account, context);
   if (prior.state !== 'READY') return prior;
   const current = await readActivityDetail(client, context);
-  if (current.kind !== activity.kind) {
-    throw new ProviderError('PROVIDER_CHANGED', '活动类型已变化，请刷新活动');
+  if (current.kind !== input.kind) {
+    throw new ProviderError('SIGN_INPUT_CHANGED', '签到类型已更新，请重新准备');
   }
   if (current.requirements?.face && !faceMediaId) {
     return { state: 'WAITING_FACE', message: '需要人脸验证' };
@@ -359,14 +349,22 @@ export async function submit(
   if (current.requirements?.captcha) {
     return { state: 'WAITING_CAPTCHA', message: '需要人工完成验证码' };
   }
-  if (current.requirements?.location && !('location' in input || input.kind === 'location')) {
-    throw new ProviderError('INVALID_INPUT', '该活动要求位置输入');
+  if (current.requirements?.location && input.kind !== 'location' && !input.location) {
+    throw new ProviderError('SIGN_INPUT_CHANGED', '该活动要求签到位置，请重新准备');
+  }
+  if (input.kind === 'photo' && !input.mediaIdByAccount[account.userId]) {
+    if (!resolvePhoto) throw new ProviderError('INVALID_INPUT', '缺少当前账号上传的照片');
+    input = { ...input, mediaIdByAccount: { [account.userId]: await resolvePhoto() } };
   }
 
   await establishSignContext(client, activity.id);
+  if (qr) await assertCurrentQr(client, activity.id, qr.code);
   const url = await submissionUrl(client, account, current, input, faceMediaId);
+  if (qr) url.searchParams.set('enc', qr.enc);
   const result = parseSubmitResponse(await (await client.request(url.href, {}, 0, onSubmit)).text());
   if (result.state !== 'READY') return result;
-  const verified = await readStatus(client, account, current);
-  return verified.state === 'SIGNED' ? { ...verified, submitted: true } : verified;
+  const verified = await readStatus(client, account, current).catch(() => undefined);
+  return verified?.state === 'SIGNED'
+    ? { ...verified, submitted: true }
+    : { state: 'WAITING_CONFIRMATION', message: '已提交，签到结果待确认' };
 }

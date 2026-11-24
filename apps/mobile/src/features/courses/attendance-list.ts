@@ -1,5 +1,5 @@
 import type { Activity } from '@sign/shared';
-import { activityPhase } from './activity-phase';
+import { activityPhaseLabel } from './activity-phase';
 
 export function courseAttendanceGroups(cache: Activity[], accountId: string, courseId: string, classId: string) {
   const activities = cache.filter(activity => activity.cacheAccountId === accountId && activity.courseId === courseId && activity.classId === classId);
@@ -11,6 +11,5 @@ export function courseAttendanceGroups(cache: Activity[], accountId: string, cou
 }
 
 export function attendanceRow(activity: Activity) {
-  const phase = activityPhase(activity) === 'ended' ? '已结束' : '进行中';
-  return { detail: phase, symbol: activity.signed === true ? '✓' : activity.signed === false ? '–' : '?' };
+  return { detail: activityPhaseLabel(activity), symbol: activity.signed === true ? '✓' : activity.signed === false ? '–' : '?' };
 }

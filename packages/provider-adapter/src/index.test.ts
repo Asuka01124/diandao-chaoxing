@@ -22,20 +22,19 @@ describe('第三方响应解析', () => {
   });
   const qrReply = (data: object) => () => Response.json(data);
   const timeout = () => { throw new Error('timeout'); };
-  const unavailableMessage = '暂时无法确认二维码状态，请重试';
   const expiredMessage = '动态二维码已过期，请重新扫描';
   test.each([
     ['数字签到码可以与扫码原文匹配', '123456', [qrReply({ isOver: 0, signCode: 123456 })], 'SIGNED', ''],
     ['字符串签到码保留前导零', '012345', [qrReply({ isOver: '0', signCode: '012345' })], 'SIGNED', ''],
     ['数字签到码不会吞掉扫码原文的前导零', '012345', [qrReply({ isOver: 0, signCode: 12345 })], 'QR_EXPIRED', expiredMessage],
     ['活动已结束时不发送签到提交', '123456', [qrReply({ isOver: 1, signCode: 123456 })], 'QR_EXPIRED', expiredMessage],
-    ['缺少活动状态时无法确认', '123456', [qrReply({ signCode: 123456 })], 'PROVIDER_CHANGED', unavailableMessage],
-    ['缺少签到码时无法确认', '123456', [qrReply({ isOver: 0 })], 'PROVIDER_CHANGED', unavailableMessage],
-    ['超出安全整数范围的签到码无法确认', '9007199254740992', [qrReply({ isOver: 0, signCode: 9007199254740992 })], 'PROVIDER_CHANGED', unavailableMessage],
-    ['无效 JSON 时无法确认', '123456', [() => new Response('invalid json')], 'PROVIDER_CHANGED', unavailableMessage],
+    ['缺少活动状态时放行给提交裁决', '123456', [qrReply({ signCode: 123456 })], 'SIGNED', ''],
+    ['缺少签到码时放行给提交裁决', '123456', [qrReply({ isOver: 0 })], 'SIGNED', ''],
+    ['超出安全整数范围的签到码不做不可靠比较，放行提交', '9007199254740992', [qrReply({ isOver: 0, signCode: 9007199254740992 })], 'SIGNED', ''],
+    ['无效 JSON 时放行给提交裁决', '123456', [() => new Response('invalid json')], 'SIGNED', ''],
     ['临时超时后重试校验并提交一次', '123456', [timeout, qrReply({ isOver: 0, signCode: 123456 })], 'SIGNED', ''],
-    ['连续超时仅重试一次后提示无法确认', '123456', [timeout, timeout], 'NETWORK_TIMEOUT', unavailableMessage],
-    ['被限流时不自动重试', '123456', [() => new Response('', { status: 429 })], 'RATE_LIMITED', '操作太频繁了，请稍等一会儿再试'],
+    ['连续超时重试一次后放行给提交裁决', '123456', [timeout, timeout], 'SIGNED', ''],
+    ['被限流时不自动重试，放行给提交裁决', '123456', [() => new Response('', { status: 429 })], 'SIGNED', ''],
   ] as const)('%s', async (_label, code, replies, expected, message) => {
     let checks = 0;
     let submissions = 0;
@@ -115,6 +114,18 @@ describe('账号隔离与上传', () => {
     const transport = async (_url: string, init: RequestInit) => { seen.push(new Headers(init.headers).get('cookie') ?? ''); return new Response('ok'); };
     await Promise.all([new RequestSession(session('alice'), transport).request('https://mobilelearn.chaoxing.com/x'), new RequestSession(session('bob'), transport).request('https://mobilelearn.chaoxing.com/x')]);
     expect(seen.sort()).toEqual(['fid=alice', 'fid=bob']);
+  });
+  test('重定向容忍多跳但仍封顶，且每跳受 host 白名单约束', async () => {
+    const chain = ['https://mobilelearn.chaoxing.com/a', 'https://mobilelearn.chaoxing.com/b', 'https://mobilelearn.chaoxing.com/c', 'https://mobilelearn.chaoxing.com/d', 'https://mobilelearn.chaoxing.com/e'];
+    let hops = 0;
+    const ok = await new RequestSession(session('a'), async url => {
+      const i = chain.indexOf(url); hops++;
+      return i < chain.length - 1 ? new Response('', { status: 302, headers: { location: chain[i + 1] } }) : new Response('done');
+    }).request(chain[0]);
+    expect(await ok.text()).toBe('done');
+    expect(hops).toBe(5);
+    await expect(new RequestSession(session('a'), async () => new Response('', { status: 302, headers: { location: 'https://mobilelearn.chaoxing.com/loop' } })).request('https://mobilelearn.chaoxing.com/loop')).rejects.toMatchObject({ code: 'PROVIDER_CHANGED' });
+    await expect(new RequestSession(session('a'), async () => new Response('', { status: 302, headers: { location: 'https://evil.example/x' } })).request('https://mobilelearn.chaoxing.com/x')).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
   test('照片按会话上传，返回媒体 ID', async () => {
     const jpg = Buffer.from([0xff, 0xd8, ...Array(120).fill(0), 0xff, 0xd9]).toString('base64');

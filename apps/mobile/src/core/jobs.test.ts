@@ -6,7 +6,7 @@ let counter = 0;
 mock.module('expo-crypto', () => ({ randomUUID: () => `job-${++counter}` }));
 class FakeClientError extends Error { constructor(public code: string, message: string, public retryable = false) { super(message); } }
 const behavior = {
-  submit: async (_id: string): Promise<{ state: 'READY' | 'SIGNED'; submitted?: boolean }> => ({ state: 'READY' }),
+  submit: async (_id: string): Promise<SignStatus> => ({ state: 'READY' }),
   status: async (_id: string): Promise<{ state: 'READY' | 'SIGNED' }> => ({ state: 'READY' }),
   prepare: async (_id: string, _faceMediaId?: string): Promise<SignStatus | undefined> => undefined,
   upload: async (_id: string): Promise<{ mediaId: string }> => ({ mediaId: 'image' }),
@@ -19,10 +19,11 @@ mock.module('./api', () => ({
   api: {
     check: async (s: ProviderSession) => { providerCalls.push('check'); return s; },
     status: async (s: ProviderSession) => { providerCalls.push('status'); return behavior.status(s.userId); },
-    submit: async (s: ProviderSession, _activity: Activity, _input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>) => {
+    submit: async (s: ProviderSession, _activity: Activity, input: SignInput, faceMediaId?: string, onSubmit?: () => void | Promise<void>, resolvePhoto?: () => Promise<string>) => {
       providerCalls.push('submit');
       const stopped = await behavior.prepare(s.userId, faceMediaId);
       if (stopped) return stopped;
+      if (input.kind === 'photo' && !input.mediaIdByAccount[s.userId]) await resolvePhoto?.();
       await onSubmit?.();
       return behavior.submit(s.userId);
     },
@@ -79,15 +80,15 @@ test('动态码过期后只继续未完成账号', async () => {
   behavior.status = async id => ({ state: signed.has(id) ? 'SIGNED' : 'READY' });
   const job = await createJob(state, { ...activity, kind: 'qr' }, ['a', 'b'], { kind: 'qr', qrPayload: 'old', scannedAt: new Date().toISOString() });
   await runJob(state, job.id); expect(state.get().attempts.map(a => a.state)).toEqual(['SUCCESS', 'WAITING_QR']);
-  fresh = true; await replaceQrAndResume(state, job.id, 'new', new Date().toISOString());
+  fresh = true; await replaceQrAndResume(state, job.id, 'new', new Date(Date.now() - 180_000).toISOString());
   expect(calls).toEqual(['a', 'b', 'b']); expect(state.get().attempts.map(a => a.state)).toEqual(['SUCCESS', 'SUCCESS']);
 });
 
-test('过期扫描时间不会改变等待中的二维码任务', async () => {
+test('无效扫码信息不会改变等待中的二维码任务', async () => {
   const state = store();
   const job = await createJob(state, { ...activity, kind: 'qr' }, ['a'], { kind: 'qr', qrPayload: 'old', scannedAt: new Date().toISOString() });
   await state.update(data => { data.attempts[0].state = 'WAITING_QR'; data.jobs[0].state = 'WAITING'; });
-  await expect(replaceQrAndResume(state, job.id, 'late', new Date(Date.now() - 180_000).toISOString())).rejects.toThrow('过期');
+  await expect(replaceQrAndResume(state, job.id, 'late', 'invalid time')).rejects.toThrow('无效');
   expect(state.get().jobs[0].input).toEqual(job.input);
   expect(state.get().attempts[0].state).toBe('WAITING_QR');
 });
@@ -122,12 +123,25 @@ test('已核验的新提交不再发起会覆盖成功的额外查询', async ()
   expect(state.get().attempts[0].state).toBe('SUCCESS');
 });
 
-test('远端仍未签到时不能把提交接受或队列结束当成签到成功', async () => {
+test('结果待确认的任务只核查原提交，不允许重新提交', async () => {
   const state = store();
   const job = await createJob(state, { ...activity, title: '第五次签到' }, ['a'], { kind: 'click' });
+  behavior.submit = async () => ({ state: 'WAITING_CONFIRMATION', message: '已提交，签到结果待确认' });
   await runJob(state, job.id);
-  expect(state.get().attempts[0].state).toBe('FAILED');
-  expect(state.get().attempts[0].message).toBe('学习通仍显示未签到，请检查活动要求后重试');
+  expect(state.get().attempts[0]).toMatchObject({ state: 'WAITING_CONFIRMATION', count: 1 });
+  expect(state.get().jobs[0].state).toBe('WAITING');
+
+  providerCalls.length = 0;
+  await runJob(state, job.id);
+  await expect(retryAttempt(state, job.id, 'a')).rejects.toThrow('不能重试');
+  await expect(checkChallenge(state, job.id, 'a')).rejects.toThrow('暂未确认');
+  expect(state.get().attempts[0].state).toBe('WAITING_CONFIRMATION');
+  behavior.status = async () => ({ state: 'SIGNED' });
+  await checkChallenge(state, job.id, 'a');
+
+  expect(providerCalls).toEqual(['status', 'status']);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'SUCCESS', count: 1 });
+  expect(state.get().jobs[0].state).toBe('DONE');
 });
 
 test('签到前解析失败明确说明未提交，重试不会绕过核查', async () => {
@@ -196,6 +210,16 @@ test('准备阶段超时不进入提交核验，也不增加次数', async () =>
   expect(providerCalls).toEqual(['check', 'submit']);
 });
 
+test('活动要求变化时保留补填原因，点击普通重试也不会发送同一份输入', async () => {
+  const state = store();
+  behavior.prepare = async () => { throw new FakeClientError('SIGN_INPUT_CHANGED', '签到类型已更新，请重新准备'); };
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  await runJob(state, job.id);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'FAILED', count: 0, code: 'SIGN_INPUT_CHANGED' });
+  await expect(retryAttempt(state, job.id, 'a')).rejects.toThrow('重新准备');
+  expect(providerCalls).toEqual(['check', 'submit']);
+});
+
 test('学习通具体拒绝原因保存在账号结果中，次数反映实际提交', async () => {
   const state = store();
   behavior.submit = async () => { throw new FakeClientError('PROVIDER_CHANGED', '学习通返回：教师已结束本次活动'); };
@@ -241,6 +265,29 @@ test('重启恢复先查远端，已提交账号不重签且记为成功', async
   expect(state.get().attempts[0].state).toBe('SUCCESS');
 });
 
+test('重启后无法确认提交时保持待确认，后续任务执行也不会重发', async () => {
+  const state = store();
+  const job = await createJob(state, activity, ['a'], { kind: 'click' });
+  await state.update(data => {
+    data.attempts[0].state = 'SUBMITTING';
+    data.attempts[0].count = 1;
+  });
+  behavior.status = async () => { throw new FakeClientError('NETWORK_TIMEOUT', '超时'); };
+  await runJob(state, job.id);
+  await runJob(state, job.id);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'WAITING_CONFIRMATION', count: 1 });
+  expect(providerCalls).toEqual(['check', 'status']);
+});
+
+test('预签到已确认成功时不用再上传照片', async () => {
+  const state = store();
+  behavior.prepare = async () => ({ state: 'SIGNED' });
+  const job = await createJob(state, { ...activity, kind: 'photo' }, ['a'], { kind: 'photo', mediaIdByAccount: {} }, 'file:///cache/sign-photo-unused.jpg');
+  await runJob(state, job.id);
+  expect(state.get().attempts[0]).toMatchObject({ state: 'ALREADY_SIGNED', count: 0 });
+  expect(providerCalls).toEqual(['check', 'submit']);
+});
+
 test('上传失败的临时照片固定保留 24 小时，到期清理且预留照片不受影响', async () => {
   const state = store();
   const reserved = { id: 'reserved-1', createdAt: '2026-10-02T00:00:00.000Z', name: '门口' };
@@ -258,7 +305,10 @@ test('上传失败的临时照片固定保留 24 小时，到期清理且预留�
   expect(clearedPhotos).toEqual([uri]);
   expect(state.get().jobs[0].photoUri).toBeUndefined();
   expect(state.get().settings.reservedPhotos).toEqual([reserved]);
-  await expect(retryAttempt(state, job.id, 'a')).rejects.toThrow('临时照片已清理');
+  await retryAttempt(state, job.id, 'a');
+  expect(state.get().attempts[0]).toMatchObject({
+    state: 'FAILED', count: 0, message: '签到前检查未通过：照片已丢失，请重新选择',
+  });
 });
 
 test('结果页区分正在执行和需要恢复的任务', async () => {

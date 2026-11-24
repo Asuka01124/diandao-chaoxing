@@ -7,7 +7,7 @@ export const locationSchema = z.object({
 });
 
 export const signInputSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('click') }),
+  z.object({ kind: z.literal('click'), location: locationSchema.optional() }),
   locationSchema.extend({ kind: z.literal('location') }),
   z.object({ kind: z.literal('photo'), mediaIdByAccount: z.record(z.string(), z.string().min(1)), location: locationSchema.optional() }),
   z.object({ kind: z.literal('qr'), qrPayload: z.string().trim().min(1).max(2048), scannedAt: z.iso.datetime(), location: locationSchema.optional() }),
@@ -48,7 +48,7 @@ export type Activity = z.infer<typeof activitySchema>;
 export type Course = { id: string; classId: string; name: string; teacher?: string; imageUrl?: string };
 export type ChatGroup = { id: string; name: string };
 
-export const attemptStates = ['QUEUED', 'PREFLIGHT', 'SUBMITTING', 'VERIFYING', 'SUCCESS', 'ALREADY_SIGNED', 'WAITING_QR', 'WAITING_CAPTCHA', 'WAITING_FACE', 'REAUTH_REQUIRED', 'EXPIRED', 'FAILED'] as const;
+export const attemptStates = ['QUEUED', 'PREFLIGHT', 'SUBMITTING', 'VERIFYING', 'WAITING_CONFIRMATION', 'SUCCESS', 'ALREADY_SIGNED', 'WAITING_QR', 'WAITING_CAPTCHA', 'WAITING_FACE', 'REAUTH_REQUIRED', 'EXPIRED', 'FAILED'] as const;
 export type AttemptState = typeof attemptStates[number];
 export type Account = { id: string; label: string; role: 'primary' | 'delegate'; session: ProviderSession; authorizedAt: string; verifiedAt?: string; state: 'VALID' | 'UNKNOWN' | 'REAUTH_REQUIRED' };
 export type ReservedPhoto = { id: string; createdAt: string; name?: string };
@@ -57,9 +57,9 @@ export type Attempt = { jobId: string; accountId: string; state: AttemptState; c
 export type VaultData = { schemaVersion: 2; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; reservedPhotos: ReservedPhoto[] } };
 export const emptyVault = (): VaultData => ({ schemaVersion: 2, accounts: [], activityCache: [], jobs: [], attempts: [], settings: { favoriteLocations: [], reservedPhotos: [] } });
 
-export const apiErrorCodes = ['INVALID_INPUT', 'NETWORK_TIMEOUT', 'SESSION_EXPIRED', 'REAUTH_REQUIRED', 'ACTIVITY_NOT_FOUND', 'NOT_MEMBER', 'ALREADY_SIGNED', 'QR_EXPIRED', 'LOCATION_REJECTED', 'VALIDATION_FAILED', 'PROVIDER_CHANGED', 'UNSUPPORTED', 'RATE_LIMITED', 'UNKNOWN'] as const;
+export const apiErrorCodes = ['INVALID_INPUT', 'SIGN_INPUT_CHANGED', 'NETWORK_TIMEOUT', 'SESSION_EXPIRED', 'REAUTH_REQUIRED', 'ACTIVITY_NOT_FOUND', 'NOT_MEMBER', 'ALREADY_SIGNED', 'QR_EXPIRED', 'LOCATION_REJECTED', 'VALIDATION_FAILED', 'PROVIDER_CHANGED', 'UNSUPPORTED', 'RATE_LIMITED', 'UNKNOWN'] as const;
 export type ApiErrorCode = typeof apiErrorCodes[number];
-export type SignStatus = { state: 'READY' | 'SIGNED' | 'EXPIRED' | 'WAITING_CAPTCHA' | 'WAITING_FACE' | 'WAITING_QR'; message?: string; submitted?: boolean };
+export type SignStatus = { state: 'READY' | 'SIGNED' | 'EXPIRED' | 'WAITING_CONFIRMATION' | 'WAITING_CAPTCHA' | 'WAITING_FACE' | 'WAITING_QR'; message?: string; submitted?: boolean; attendanceUnconfirmed?: boolean };
 
 export function validateActivityInput(activity: Activity, input: SignInput): void {
   signInputSchema.parse(input);

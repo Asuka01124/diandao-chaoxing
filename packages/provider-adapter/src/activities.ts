@@ -6,7 +6,7 @@ import { signStatus } from './sign';
 
 function kindFrom(raw: Record<string, unknown>): Activity["kind"] {
   const other = String(raw.otherId ?? "");
-  if (other === "0") return "click";
+  if (other === "0") return Number(raw.ifphoto) === 1 ? "photo" : "click";
   if (other === "2") return "qr";
   if (other === "3") return "gesture";
   if (other === "4") return "location";
@@ -28,10 +28,12 @@ export async function activities(
       const activity = list[index++];
       try {
         const status = await signStatus(session, activity, transport);
-        activity.signed = status.state === 'SIGNED' ? true : status.state === 'READY' || status.state === 'EXPIRED' ? false : null;
+        if (status.state === 'SIGNED') activity.signed = true;
+        else if (status.state === 'READY' || (status.state === 'EXPIRED' && !status.attendanceUnconfirmed)) activity.signed = false;
       } catch (error) {
         // 单个活动无法确认时保留列表中的待确认状态。
-        if (!(error instanceof ProviderError) || error.code !== 'PROVIDER_CHANGED') throw error;
+        if (!(error instanceof ProviderError) || error.code === 'SESSION_EXPIRED' || error.code === 'REAUTH_REQUIRED') throw error;
+        if (error.code === 'RATE_LIMITED') index = list.length;
       }
     }
   }));
@@ -87,13 +89,14 @@ export async function readActivityDetail(jar: RequestSession, activity: Activity
   url.searchParams.set("activeId", activity.id);
   const result = await json(await jar.request(url.toString()));
   const info = asObject(result.data);
+  const detected = info.otherId == null ? activity.kind : kindFrom(info);
+  const clickOrPhoto = detected === 'click' || detected === 'photo';
   const requirements = {
     captcha: Number(info.ifNeedVCode) === 1,
     face: Number(info.openCheckFaceFlag) === 1,
     location: Number(info.ifopenAddress) === 1,
-    photo: Number(info.ifphoto) === 1,
+    photo: info.ifphoto == null ? clickOrPhoto && activity.kind === 'photo' : Number(info.ifphoto) === 1,
   };
-  const detected = info.otherId === undefined ? activity.kind : kindFrom(info);
   const relation = {
     signInId:
       info.signInId == null ? undefined : str(info.signInId, "signInId"),
@@ -107,7 +110,7 @@ export async function readActivityDetail(jar: RequestSession, activity: Activity
   };
   return {
     ...activity,
-    kind: detected === "click" && requirements.photo ? "photo" : detected,
+    kind: clickOrPhoto ? (requirements.photo ? 'photo' : 'click') : detected,
     requirements,
     relation,
     startTime: stamp(info.starttime) ?? activity.startTime,

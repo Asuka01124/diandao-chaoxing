@@ -93,15 +93,26 @@ export default function JobScreen() {
   const signedAll = attempts.length > 0 && attempts.every(a => a.state === 'SUCCESS' || a.state === 'ALREADY_SIGNED');
   const faceTargets = attempts.filter(a => a.state === 'WAITING_FACE');
   const captchaTargets = attempts.filter(a => a.state === 'WAITING_CAPTCHA');
-  const failedTargets = attempts.filter(a => a.state === 'FAILED' || a.state === 'REAUTH_REQUIRED');
-  const photoTargets = job.input.kind === 'photo' ? attempts.filter(a => a.state === 'FAILED') : [];
+  const confirmationTargets = attempts.filter(a => a.state === 'WAITING_CONFIRMATION');
+  const inputTargets = attempts.filter(a => a.state === 'FAILED' && a.code === 'SIGN_INPUT_CHANGED');
+  const failedTargets = attempts.filter(a => (a.state === 'FAILED' && a.code !== 'SIGN_INPUT_CHANGED') || a.state === 'REAUTH_REQUIRED');
+  const photoTargets = job.input.kind === 'photo' ? failedTargets.filter(a => a.state === 'FAILED') : [];
   const qrWaiting = attempts.some(a => a.state === 'WAITING_QR');
   const dockMode = faceTargets.length ? 'face' as const : photoTargets.length ? 'photo' as const : null;
   const dockTargets = dockMode === 'face' ? faceTargets : photoTargets;
 
+  function prepareAgain(accountIds: string[]) {
+    if (!job || executing) return;
+    const available = accountIds.filter(accountId => store.get().accounts.some(account => account.id === accountId));
+    if (!available.length) { notify('请选择仍在登录的账号', 'error'); return; }
+    router.push({ pathname: '/prepare/[id]', params: {
+      id: job.activity.id, accountId: available[0], previousJobId: id, selectedIds: available.join(','),
+    } });
+  }
+
   async function checkWaiting() {
     let first: unknown = null;
-    for (const attempt of [...captchaTargets, ...faceTargets]) {
+    for (const attempt of [...confirmationTargets, ...captchaTargets, ...faceTargets]) {
       try { await checkChallenge(store, id, attempt.accountId); } catch (e) { first ??= e; }
     }
     if (first) throw first;
@@ -113,14 +124,17 @@ export default function JobScreen() {
     }
     if (first) throw first;
   }
-  const resultAction = captchaTargets.length + faceTargets.length > 0 ? { key: 'check', label: '检查结果', run: checkWaiting }
+  const resultAction = inputTargets.length > 0 ? { key: 'prepare', label: '重新准备签到', run: async () => prepareAgain(inputTargets.map(a => a.accountId)) }
+    : confirmationTargets.length + captchaTargets.length + faceTargets.length > 0 ? { key: 'check', label: '检查结果', run: checkWaiting }
     : failedTargets.length > 0 ? { key: 'retry', label: '检查并重试', run: retryFailed } : null;
 
   const accountActions = (attempt: Attempt) => {
     const accountId = attempt.accountId;
     const list: { label: string; onPress: () => void }[] = [];
     const check = { label: '检查学习通签到结果', onPress: () => { void runAction(`challenge-${accountId}`, () => checkChallenge(store, id, accountId)); } };
-    if (attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED') {
+    if (attempt.state === 'FAILED' && attempt.code === 'SIGN_INPUT_CHANGED') {
+      list.push({ label: '重新准备签到', onPress: () => prepareAgain([accountId]) });
+    } else if (attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED') {
       list.push({ label: '检查并重试', onPress: () => { void runAction(`retry-${accountId}`, () => retryAttempt(store, id, accountId)); } });
       if (attempt.state === 'FAILED' && job.input.kind === 'photo') {
         list.push({ label: '拍照重试', onPress: () => { void runAction(`photo-camera-${accountId}`, () => providePhoto(accountId, true)); } });
@@ -134,7 +148,7 @@ export default function JobScreen() {
       if (data.settings.reservedPhotos.length) list.push({ label: reservedPickerAccountId === accountId ? '收起预留照片' : '用预留照片验证', onPress: () => setReservedPickerAccountId(current => current === accountId ? null : accountId) });
       list.push(check);
     }
-    if (attempt.state === 'WAITING_CAPTCHA') list.push(check);
+    if (attempt.state === 'WAITING_CAPTCHA' || attempt.state === 'WAITING_CONFIRMATION') list.push(check);
     if (attempt.state === 'WAITING_QR') list.push({ label: '重新扫码并继续', onPress: () => router.push({ pathname: '/scan', params: { id: job.activity.id, jobId: job.id } }) });
     return list;
   };
@@ -215,7 +229,7 @@ export default function JobScreen() {
       })}
     </XStack>
     {resultAction && <YStack alignSelf="flex-start">
-      <PrimaryButton variant="secondary" loading={activeAction === resultAction.key} disabled={!!activeAction}
+      <PrimaryButton variant="secondary" loading={activeAction === resultAction.key} disabled={!!activeAction || executing}
         onPress={() => { void runAction(resultAction.key, resultAction.run); }}>{resultAction.label}</PrimaryButton>
     </YStack>}
     {tab === 'current' ? <>
@@ -224,7 +238,7 @@ export default function JobScreen() {
         const actions = accountActions(attempt);
         return <YStack key={attempt.accountId}>
           <SettingsRow title={accountLabel(attempt.accountId)}
-            detail={attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED' ? attempt.message : undefined}
+            detail={attempt.state === 'FAILED' || attempt.state === 'REAUTH_REQUIRED' || attempt.state === 'WAITING_CONFIRMATION' ? attempt.message : undefined}
             selected={isActive(attempt.state)}
             accessory={<StatusBadge state={attempt.state} />}
             onPress={actions.length ? () => setSheet({ kind: 'account', accountId: attempt.accountId }) : undefined} />

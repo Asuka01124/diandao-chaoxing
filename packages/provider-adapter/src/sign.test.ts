@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Activity, ProviderSession } from '@sign/shared';
-import { activities, readCourseActivities } from './activities';
+import { activities, activityDetail, readCourseActivities } from './activities';
 import { RequestSession } from './session';
 import { parseStatusPage, parseSubmitResponse, signStatus, submit } from './sign';
 
@@ -11,12 +11,23 @@ const list = (userStatus: unknown, extra: Record<string, unknown> = {}) => ({ da
   { id: 'fifth', nameOne: '第五次签到', type: 2, otherId: 0, status: 1, userStatus, ...extra },
 ] } });
 
+test('活动列表和详情都能识别拍照要求，详情可补齐列表的类型', async () => {
+  for (const ifphoto of [1, undefined]) {
+    const response = list(0, { ifphoto });
+    const [, cached] = await readCourseActivities(new RequestSession(account, async () => Response.json(response)), activity.courseId, activity.classId);
+    expect(cached.kind).toBe(ifphoto ? 'photo' : 'click');
+    const actual = await activityDetail(account, cached, async () => Response.json({ data: { otherId: 0, ifphoto: 1 } }));
+    expect(actual).toMatchObject({ kind: 'photo', requirements: { photo: true } });
+  }
+});
+
 test('状态对象支持嵌套字段、转义引号及字符串中的括号', () => {
   const record = { status: 1, extra: { text: '带有 {括号} 和 "引号"' } };
   expect(parseStatusPage(JSON.stringify({ primaryAttend: record })).state).toBe('SIGNED');
   expect(parseStatusPage(`var primaryAttend = ${JSON.stringify(record)};`).state).toBe('SIGNED');
   expect(parseStatusPage('var signstatus = "0";').state).toBe('READY');
   expect(parseStatusPage('{"signstatus":"1"}').state).toBe('SIGNED');
+  expect(parseStatusPage('var primaryAttend = {"status":null}; var signstatus = 1;').state).toBe('SIGNED');
 });
 
 test('未知状态、null 和空字符串不能当成允许提交', () => {
@@ -49,6 +60,20 @@ test('没有状态字段的预签到页通过同一账号活动列表确认第�
   expect(paths).toEqual(['/newsign/preSign', '/v2/apis/active/student/activelist']);
 });
 
+test('未知个人状态通过课程列表核查，未知的活动状态不会假定已结束', async () => {
+  for (const status of [1, 0, 7]) {
+    const calls: string[] = [];
+    const result = signStatus(account, activity, async url => {
+      const path = new URL(url).pathname;
+      calls.push(path);
+      return path.endsWith('/preSign') ? new Response('signstatus = 7') : Response.json(list(0, { status }));
+    });
+    if (status === 1) expect((await result).state).toBe('READY');
+    else await expect(result).rejects.toMatchObject({ code: 'PROVIDER_CHANGED' });
+    expect(calls).toEqual(['/newsign/preSign', '/v2/apis/active/student/activelist']);
+  }
+});
+
 test('列表中其他签到成功不代表第五次成功，缺少目标活动时不放行', async () => {
   await expect(signStatus(account, activity, async url => new URL(url).pathname.endsWith('/preSign')
     ? new Response('<html>未知页面</html>')
@@ -58,7 +83,7 @@ test('列表中其他签到成功不代表第五次成功，缺少目标活动�
 
 test('列表 userStatus=1 不能代表个人签到成功，截止单独判断', async () => {
   for (const [userStatus, extra, expected] of [
-    [1, {}, 'READY'], [0, { status: 2 }, 'EXPIRED'], [0, { endTime: Date.now() - 1 }, 'EXPIRED'],
+    [1, {}, 'READY'], [0, { status: 2 }, 'EXPIRED'], [0, { endTime: Date.now() - 1 }, 'READY'],
   ] as const) {
     expect((await signStatus(account, activity, async url => new URL(url).pathname.endsWith('/preSign')
       ? new Response('<html>签到页面</html>') : Response.json(list(userStatus, extra)))).state).toBe(expected);
@@ -105,7 +130,7 @@ test('提交后必须由个人结果确认成功，列表 userStatus 不作为�
       throw new Error('不应请求其他接口');
     });
     expect(sent).toBe(true);
-    expect(result.state).toBe(actuallySigned ? 'SIGNED' : 'READY');
+    expect(result.state).toBe(actuallySigned ? 'SIGNED' : 'WAITING_CONFIRMATION');
     expect(Boolean(result.submitted)).toBe(actuallySigned);
   }
 });
@@ -141,12 +166,49 @@ test('单个活动状态未知时继续同步同课程的其他活动', async ()
   expect(result.map(item => [item.id, item.signed])).toEqual([['fifth', null], ['fourth', true], ['third', false]]);
 });
 
+test('单条活动无权限不会丢弃同课程其它活动', async () => {
+  const result = await activities(account, activity.courseId, activity.classId, async url => {
+    const target = new URL(url);
+    if (target.pathname.endsWith('/activelist')) return Response.json(list(0));
+    return new Response(target.searchParams.get('activePrimaryId') === 'fifth' ? '校验失败，未查询到活动数据' : 'signstatus = 1');
+  });
+  expect(result.map(item => [item.id, item.signed])).toEqual([['fourth', true], ['fifth', null]]);
+});
+
 test('活动列表仍会报告会话过期', async () => {
   await expect(activities(account, activity.courseId, activity.classId, async url =>
     new URL(url).pathname.endsWith('/activelist')
       ? Response.json(list(0))
       : new Response('<form action="https://passport2.chaoxing.com/fanyalogin"><input type="password"></form>')
   )).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+});
+
+test('已被服务端接受的提交在个人结果查询失败时保持待确认', async () => {
+  let sent = false;
+  const result = await submit(account, activity, { kind: 'click' }, async url => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 0 } });
+    if (path.endsWith('/preSign')) return sent ? new Response('', { status: 503 }) : new Response('signstatus = 0');
+    if (path.endsWith('/analysis')) return new Response("code='+'abc'");
+    if (path.endsWith('/analysis2')) return new Response('ok');
+    if (path.endsWith('/stuSignajax')) { sent = true; return new Response('success'); }
+    throw new Error('未知请求');
+  });
+  expect(sent).toBe(true);
+  expect(result.state).toBe('WAITING_CONFIRMATION');
+});
+
+test('照片和新出现的位置要求返回可补填错误，在发现要求之前不会上传或提交', async () => {
+  for (const details of [{ otherId: 0, ifphoto: 1 }, { otherId: 0, ifopenAddress: 1 }]) {
+    const paths: string[] = [];
+    await expect(submit(account, activity, { kind: 'click' }, async url => {
+      const path = new URL(url).pathname;
+      paths.push(path);
+      if (path.endsWith('/preSign')) return new Response('signstatus = 0');
+      return Response.json({ data: details });
+    })).rejects.toMatchObject({ code: 'SIGN_INPUT_CHANGED' });
+    expect(paths).toEqual(['/newsign/preSign', '/v2/apis/active/getPPTActiveInfo']);
+  }
 });
 
 test('活动结束不会覆盖已确认的个人签到记录', () => {
@@ -172,6 +234,33 @@ test('计数通知紧邻实际提交，普通签到只建立一次上下文并�
   expect(account.cookies).toEqual([]);
 });
 
+test('预签到确认 token 容忍页面拼接格式漂移', async () => {
+  const variants: [string, string][] = [
+    ["code='+'abc'", 'abc'],
+    ["code = '+'abc'", 'abc'],
+    ['code="+"abc"', 'abc'],
+    ["code=' + 'abc'", 'abc'],
+    ['code=abc', 'abc'],
+    ["&amp;code='+'abc'", 'abc'],
+    ["$.ajax({url:'/pptSign/analysis2?DB_STRATEGY=RANDOM&amp;code='+'76e7e8b6ab86ccfd7e71de0495bbe3fb'});", '76e7e8b6ab86ccfd7e71de0495bbe3fb'],
+  ];
+  for (const [page, expected] of variants) {
+    let sent = false; let confirmed = '';
+    const result = await submit(account, activity, { kind: 'click' }, async url => {
+      const target = new URL(url); const path = target.pathname;
+      if (path.endsWith('/preSign')) return new Response(`signstatus = ${sent ? 1 : 0}`);
+      if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 0 } });
+      if (path.endsWith('/analysis')) return new Response(page);
+      if (path.endsWith('/analysis2')) { confirmed = target.searchParams.get('code') ?? ''; return new Response('ok'); }
+      if (path.endsWith('/stuSignajax')) { sent = true; return new Response('success'); }
+      throw new Error('未知请求');
+    });
+    expect(confirmed).toBe(expected);
+    expect(sent).toBe(true);
+    expect(result.state).toBe('SIGNED');
+  }
+});
+
 test('已签到、截止、等待验证和准备失败均不增加提交次数', async () => {
   for (const mode of ['signed', 'expired', 'captcha', 'face', 'analysis', 'qr'] as const) {
     let count = 0; let sent = 0;
@@ -190,6 +279,37 @@ test('已签到、截止、等待验证和准备失败均不增加提交次数',
     else expect((await outcome).state).toBe(({ signed: 'SIGNED', expired: 'EXPIRED', captcha: 'WAITING_CAPTCHA', face: 'WAITING_FACE' } as const)[mode]);
     expect(count).toBe(0); expect(sent).toBe(0);
   }
+});
+
+test('二维码校验无法确认时放行给提交，明确过期才拦截', async () => {
+  const target: Activity = { ...activity, kind: 'qr' };
+  const input = { kind: 'qr' as const, qrPayload: `https://mobilelearn.chaoxing.com/x?aid=${target.id}&enc=test&c=current`, scannedAt: new Date().toISOString() };
+  for (const detail of ['{}', 'not-json', 'network']) {
+    let sent = false;
+    const result = await submit(account, target, input, async url => {
+      const path = new URL(url).pathname;
+      if (path.endsWith('/preSign')) return new Response(`signstatus = ${sent ? 1 : 0}`);
+      if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 2 } });
+      if (path.endsWith('/analysis')) return new Response("code='+'abc'");
+      if (path.endsWith('/analysis2')) return new Response('ok');
+      if (path.endsWith('/signDetail')) return detail === 'network' ? new Response('err', { status: 503 }) : new Response(detail);
+      if (path.endsWith('/stuSignajax')) { sent = true; return new Response('success'); }
+      throw new Error('未知请求');
+    });
+    expect(sent).toBe(true);
+    expect(result.state).toBe('SIGNED');
+  }
+  let sent = false;
+  await expect(submit(account, target, input, async url => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/preSign')) return new Response('signstatus = 0');
+    if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 2 } });
+    if (path.endsWith('/analysis')) return new Response("code='+'abc'");
+    if (path.endsWith('/analysis2')) return new Response('ok');
+    if (path.endsWith('/signDetail')) return Response.json({ isOver: 0, signCode: 'changed' });
+    sent = true; throw new Error('明确换码不应提交');
+  })).rejects.toMatchObject({ code: 'QR_EXPIRED' });
+  expect(sent).toBe(false);
 });
 
 test('二维码人脸签到：未提供照片时等待，提供照片后携带 faceEnc 提交', async () => {
@@ -256,6 +376,14 @@ test('会话 clientId 透传到人脸材料，无法解码时仍按无签名提�
     throw new Error('遇到未知请求');
   }, 'face-photo');
   expect(result).toMatchObject({ state: 'SIGNED', submitted: true });
+});
+
+test('成功响应容忍中文与首尾标点，仍归入待核验而非直接成功', () => {
+  for (const ok of ['success', '签到成功', 'success。', '签到成功！', 'SUCCESS']) {
+    expect(parseSubmitResponse(ok).state).toBe('READY');
+  }
+  expect(parseSubmitResponse('success2').state).toBe('EXPIRED');
+  expect(parseSubmitResponse('您已签到过了').state).toBe('SIGNED');
 });
 
 test('明确的人脸和活体提示归入等待验证', () => {

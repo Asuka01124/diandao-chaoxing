@@ -31,6 +31,29 @@ test("身份查询携带加密设备信息并保存 clientId", async () => {
   expect(renewed.clientId).toBe("client-blob");
 });
 
+test("会话查询返回 HTTP 401 后续登一次并重新验证原账号", async () => {
+  const session = {
+    identifier: '13800000000', encryptedPassword: 'synthetic', cookies: [],
+    userId: '123', fid: '0', name: '测试用户', deviceCode: 'device',
+  };
+  for (const renewedUserId of [123, 456]) {
+    const calls: string[] = [];
+    const renewed = checkSession(session, async (url, init) => {
+      if (url.includes('/fanyalogin')) {
+        calls.push('login');
+        return Response.json({ status: true }, { headers: { 'set-cookie': 'sid=new; Path=/' } });
+      }
+      calls.push('identity');
+      if (calls.length === 1) return new Response('', { status: 401 });
+      expect(new Headers(init.headers).get('cookie')).toContain('sid=new');
+      return Response.json({ msg: { puid: renewedUserId, fid: 0, name: '测试用户' } });
+    });
+    if (renewedUserId === 123) expect((await renewed).userId).toBe('123');
+    else await expect(renewed).rejects.toMatchObject({ code: 'REAUTH_REQUIRED' });
+    expect(calls).toEqual(['identity', 'login', 'identity']);
+  }
+});
+
 test("登录 Cookie 跨学习通子域传递给身份查询", async () => {
   let identityCookie = "";
   const session = await login(
@@ -102,7 +125,7 @@ test("登录及身份查询的服务器异常只显示易懂提示", async () =>
 test("HTTP 登录错误根据原因给出操作提示，不展示响应原文", async () => {
   const cases = [
     [429, '操作太频繁了，请稍等一会儿再试', 'RATE_LIMITED', true],
-    [401, '学习通登录已过期，请重新登录', 'UNKNOWN', false],
+    [401, '学习通登录已过期，请重新登录', 'SESSION_EXPIRED', false],
     [403, '学习通暂时不允许访问，请稍后再试', 'UNKNOWN', false],
     [408, '连接学习通超时，请检查网络后重试', 'UNKNOWN', false],
     [400, '学习通未能处理这次请求，请稍后再试', 'UNKNOWN', false],

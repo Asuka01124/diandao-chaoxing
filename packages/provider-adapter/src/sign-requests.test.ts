@@ -14,9 +14,11 @@ const base: Activity = {
 const point = { latitude: 31.123456789, longitude: 121.987654321, address: '离线测试位置' };
 const cases: { label: string; input: SignInput; detail: object; fields: Record<string, string> }[] = [
   { label: '普通', input: { kind: 'click' }, detail: { otherId: 0 }, fields: {} },
+  { label: '附带位置的普通', input: { kind: 'click', location: point }, detail: { otherId: 0, ifopenAddress: 1 }, fields: {} },
   { label: '照片', input: { kind: 'photo', mediaIdByAccount: { 'fixture-user': 'fixture-photo', other: 'other-photo' } }, detail: { otherId: 0, ifphoto: 1 }, fields: { objectId: 'fixture-photo' } },
   { label: '位置', input: { kind: 'location', ...point }, detail: { otherId: 4 }, fields: { address: point.address, ifTiJiao: '1', vpProbability: '-1', vpStrategy: '' } },
-  { label: '二维码', input: { kind: 'qr', qrPayload: 'https://mobilelearn.chaoxing.com/widget/sign?aid=fixture-activity&enc=fixture-enc&c=fixture-current', scannedAt: new Date().toISOString() }, detail: { otherId: 2 }, fields: { enc: 'fixture-enc', vpProbability: '-1', vpStrategy: '' } },
+  { label: '三分钟前扫描的动态二维码', input: { kind: 'qr', qrPayload: 'https://mobilelearn.chaoxing.com/widget/sign?aid=fixture-activity&enc=fixture-enc&c=fixture-current', scannedAt: new Date(Date.now() - 180_000).toISOString() }, detail: { otherId: 2 }, fields: { enc: 'fixture-enc', vpProbability: '-1', vpStrategy: '' } },
+  { label: '三分钟前扫描的静态二维码', input: { kind: 'qr', qrPayload: 'https://mobilelearn.chaoxing.com/widget/sign?aid=fixture-activity&enc=fixture-enc', scannedAt: new Date(Date.now() - 180_000).toISOString() }, detail: { otherId: 2 }, fields: { enc: 'fixture-enc', vpProbability: '-1', vpStrategy: '' } },
   { label: '签到码', input: { kind: 'code', code: '123456' }, detail: { otherId: 5 }, fields: { signCode: '123456' } },
   { label: '手势', input: { kind: 'gesture', sequence: '12369' }, detail: { otherId: 3 }, fields: { signCode: '12369' } },
 ];
@@ -25,6 +27,7 @@ for (const fixture of cases) {
   test(`${fixture.label}签到离线验证请求参数、会话、提交顺序和个人结果核验`, async () => {
     let submitted = false;
     const paths: string[] = [];
+    const qrCode = fixture.input.kind === 'qr' ? new URL(fixture.input.qrPayload).searchParams.get('c') : null;
     const result = await submit(account, { ...base, kind: fixture.input.kind }, fixture.input, async (address, init) => {
       const url = new URL(address);
       paths.push(url.pathname);
@@ -45,7 +48,8 @@ for (const fixture of cases) {
         return new Response('ok');
       }
       if (url.pathname.endsWith('/signDetail')) {
-        expect(url.searchParams.get('msg')).toBe('fixture-current');
+        expect(qrCode).toBe('fixture-current');
+        expect(url.searchParams.get('msg')).toBe(qrCode);
         return Response.json({ isOver: 0, signCode: 'fixture-current' });
       }
       expect(url.pathname).toBe('/pptSign/stuSignajax');
@@ -55,7 +59,7 @@ for (const fixture of cases) {
         name: account.name, deviceCode: account.deviceCode, clientip: '', appType: '15',
         latitude: '-1', longitude: '-1', ...fixture.fields,
       };
-      if (fixture.input.kind === 'location') {
+      if (fixture.input.kind === 'location' || ('location' in fixture.input && fixture.input.location)) {
         const location = JSON.stringify({ result: 1, latitude: 31.123457, longitude: 121.987654, address: point.address });
         Object.assign(expected, { latitude: '31.123457', longitude: '121.987654', location, locationResult: location });
       }
@@ -66,10 +70,18 @@ for (const fixture of cases) {
     expect(result).toEqual({ state: 'SIGNED', submitted: true });
     expect(paths).toEqual([
       '/newsign/preSign', '/v2/apis/active/getPPTActiveInfo', '/pptSign/analysis', '/pptSign/analysis2',
-      ...(fixture.input.kind === 'qr' ? ['/newsign/signDetail'] : []), '/pptSign/stuSignajax', '/newsign/preSign',
+      ...(qrCode ? ['/newsign/signDetail'] : []), '/pptSign/stuSignajax', '/newsign/preSign',
     ]);
   });
 }
+
+test('二维码与活动不匹配时不发活动请求', async () => {
+  let calls = 0;
+  await expect(submit(account, { ...base, kind: 'qr' }, {
+    kind: 'qr', qrPayload: 'https://mobilelearn.chaoxing.com/widget/sign?aid=other-activity&enc=fixture', scannedAt: new Date().toISOString(),
+  }, async () => { calls++; return new Response('不应发送请求'); })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  expect(calls).toBe(0);
+});
 
 test('测试环境禁止默认 fetch 访问真实学习通接口', async () => {
   await expect(fetch('https://mobilelearn.chaoxing.com/')).rejects.toThrow('离线测试禁止真实网络请求');
