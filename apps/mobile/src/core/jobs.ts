@@ -78,6 +78,7 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
   const previousAttempt = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId);
   const recovering = previousAttempt?.state === 'SUBMITTING' || previousAttempt?.state === 'VERIFYING';
   let requestStarted = false;
+  let faceMediaId: string | undefined;
   try {
     if (isDemoActivity(job.activity)) {
       await setAttempt(store, job.id, accountId, 'FAILED', '旧测试课程已移除，未向学习通提交', 'INVALID_INPUT');
@@ -95,9 +96,21 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
       ? { ...job.input, mediaIdByAccount: savedMediaId ? { [session.userId]: savedMediaId } : {} }
       : job.input;
     const resolvePhoto = input.kind === 'photo' ? () => uploadSignPhoto(store, job.id, accountId, session) : undefined;
+    faceMediaId = job.faceMediaIdByAccount?.[accountId];
+    if (job.activity.requirements?.face && !faceMediaId) {
+      // 优先用学习通已录入的档案人脸直签；取不到时保留手动补照片流程。
+      faceMediaId = await api.profileFaceId(session).catch(() => undefined);
+      if (faceMediaId) {
+        const fetched = faceMediaId;
+        await store.update(data => {
+          const saved = data.jobs.find(item => item.id === job.id);
+          if (saved) saved.faceMediaIdByAccount = { ...saved.faceMediaIdByAccount, [accountId]: fetched };
+        });
+      }
+    }
     let result;
     try {
-      result = await api.submit(session, job.activity, input, job.faceMediaIdByAccount?.[accountId], async () => {
+      result = await api.submit(session, job.activity, input, faceMediaId, async () => {
         if (!accountFor(store, accountId)) throw new ClientError('INVALID_INPUT', '账号已删除');
         await setAttempt(store, job.id, accountId, 'SUBMITTING');
         requestStarted = true;
@@ -131,7 +144,7 @@ async function executeAccount(store: VaultAccess, job: Job, accountId: string): 
     }
     const client = error instanceof ClientError ? error : undefined;
     const state: AttemptState = client?.code === 'REAUTH_REQUIRED' || client?.code === 'SESSION_EXPIRED' ? 'REAUTH_REQUIRED'
-      : client?.code === 'QR_EXPIRED' ? 'WAITING_QR' : client?.code === 'VALIDATION_FAILED' && job.faceMediaIdByAccount?.[accountId] ? 'WAITING_FACE' : 'FAILED';
+      : client?.code === 'QR_EXPIRED' ? 'WAITING_QR' : client?.code === 'VALIDATION_FAILED' && (faceMediaId ?? job.faceMediaIdByAccount?.[accountId]) ? 'WAITING_FACE' : 'FAILED';
     if (state === 'REAUTH_REQUIRED') await store.update(data => { const item = data.accounts.find(a => a.id === accountId); if (item) item.state = 'REAUTH_REQUIRED'; });
     const phase = store.get().attempts.find(a => a.jobId === job.id && a.accountId === accountId)?.state;
     const message = client?.message ?? '执行失败';

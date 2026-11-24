@@ -33,4 +33,5 @@ export const api = {
     ? Promise.reject(new ClientError('INVALID_INPUT', '本机测试活动没有学习通签到状态'))
     : direct<SignStatus>(() => provider.signStatus(session, activity)),
   upload: (session: ProviderSession, jpegBase64: string) => direct(() => provider.uploadPhoto(session, jpegBase64)),
+  profileFaceId: (session: ProviderSession) => direct(() => provider.profileFaceId(session)),
 };

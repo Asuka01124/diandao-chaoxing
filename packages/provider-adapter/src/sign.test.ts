@@ -378,6 +378,51 @@ test('会话 clientId 透传到人脸材料，无法解码时仍按无签名提�
   expect(result).toMatchObject({ state: 'SIGNED', submitted: true });
 });
 
+test('checkFace_ 返回 enc2 时自动带 enc2 重提一次', async () => {
+  let submissions = 0; let proofs = 0;
+  const result = await submit(account, activity, { kind: 'click' }, async url => {
+    const target = new URL(url);
+    const path = target.pathname;
+    if (path.endsWith('/preSign')) return new Response(`signstatus = ${submissions ? 1 : 0}`);
+    if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 0, openCheckFaceFlag: 1 } });
+    if (path.endsWith('/analysis')) return new Response("code='+'abc'");
+    if (path.endsWith('/analysis2')) return new Response('ok');
+    if (path.endsWith('/check-face-result')) { proofs++; return Response.json({ enc: 'face-ok' }); }
+    if (path.endsWith('/stuSignajax')) {
+      submissions++;
+      if (submissions === 1) {
+        expect(target.searchParams.get('enc2')).toBeNull();
+        return new Response('checkFace_retry-enc');
+      }
+      expect(target.searchParams.get('enc2')).toBe('retry-enc');
+      expect(target.searchParams.get('faceEnc')).toBe('face-ok');
+      return new Response('success');
+    }
+    throw new Error('遇到未知请求');
+  }, 'face-photo');
+  expect(result).toMatchObject({ state: 'SIGNED', submitted: true });
+  expect(submissions).toBe(2);
+  expect(proofs).toBe(2);
+});
+
+test('checkFace_ 无 enc2 或重提仍要求人脸时回到等待验证', async () => {
+  for (const reply of ['checkFace_', 'checkFace_retry-enc']) {
+    let submissions = 0;
+    const result = await submit(account, activity, { kind: 'click' }, async url => {
+      const path = new URL(url).pathname;
+      if (path.endsWith('/preSign')) return new Response('signstatus = 0');
+      if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 0, openCheckFaceFlag: 1 } });
+      if (path.endsWith('/analysis')) return new Response("code='+'abc'");
+      if (path.endsWith('/analysis2')) return new Response('ok');
+      if (path.endsWith('/check-face-result')) return Response.json({ enc: 'face-ok' });
+      if (path.endsWith('/stuSignajax')) { submissions++; return new Response(reply); }
+      throw new Error('遇到未知请求');
+    }, 'face-photo');
+    expect(result.state).toBe('WAITING_FACE');
+    expect(submissions).toBe(reply === 'checkFace_' ? 1 : 2);
+  }
+});
+
 test('成功响应容忍中文与首尾标点，仍归入待核验而非直接成功', () => {
   for (const ok of ['success', '签到成功', 'success。', '签到成功！', 'SUCCESS']) {
     expect(parseSubmitResponse(ok).state).toBe('READY');

@@ -1,5 +1,14 @@
 # Android APK 构建记录（Windows）
 
+## 2026-11-24 人脸自动签到测试包（auto-face）
+
+- 源码新增档案人脸直取（`collectionfilephotoEnc`）与 `checkFace_` enc2 自动重提；194 项测试与类型检查通过。
+- 首轮标准脚本最早失败仍在 `react-native-screens:buildCMakeRelWithDebInfo[arm64-v8a]`：Ninja `manifest 'build.ninja' still dirty after 100 tries`，对象目录 200 字符超 250 上限。按既有方案把条件式 `buildStagingDirectory`（按 `DIANDAO_CMAKE_SHORT_ROOT`）补丁打到 `.bun` 真实路径（screens 4.26.2 → `rns-cxx`、gesture-handler 3.3.0 → `rngh-cxx`），原生编译通过。注意 autolinking.json 确认 Gradle 用的是 screens **4.26.2**，`.bun` 里另有 4.28.0 副本不参与构建。
+- 第二轮最早失败在 `:app:createBundleReleaseJsAndAssets`：Gradle 内 Metro 报 `Failed to get the SHA-1`，缺 `@react-native/js-polyfills/console.js`（与下文既有条目同源）。已验证修复：从 `apps/mobile` 用 `NODE_OPTIONS=--require .tooling/auto-face/metro-sha1.cjs` 独立 `bunx expo export:embed --reset-cache --minify false` 导出（2711 模块、30 资源），临时把生成的 `app/build.gradle` 的 `cliFile` 指向绝对路径 `.tooling/auto-face/copy-bundle.js` 交接，Gradle hermesc 编译字节码；`wrapper-invoked.log` 确认交接生效。
+- 校验 bundle 中文文案时注意：JSX 字符串字面量被 Metro 转成**大写**十六进制 `\u81EA…`，普通字符串保留原样；Hermes 字节码里中文按 UTF-16LE 存储。grep 小写转义或裸中文会误判缺失。Gradle 日志为 UTF-16LE，先 iconv 再检索。
+- 产物 `daodian-v1.8.7-auto-face-arm64.apk`：41,363,766 字节，包名 `dev.local.sign.tool`、版本 `1.8.7`/`48`、仅 `arm64-v8a`、原签名、INTERNET 权限在位，脚本签名/版本/架构/16 KB 对齐校验通过。`BUILD SUCCESSFUL in 11m 7s`，日志 `.tooling/build-apk-20261124-210502.log`。字节码确认含 `collectionfilephotoEnc`/`profileFaceId`/`checkFace_`/`enc2` 及 UTF-16 的「自动使用已录入照片」。
+- SHA-256：`e605f0f49af82c37682a1699ba3bdcc0054f047b2e35a6d052057826ef9c3a48`。构建后 `app/build.gradle` 与两个 `.bun` 依赖 Gradle 文件均按 `.tooling/auto-face/*.orig` 备份恢复，短盘符已撤销。档案人脸直取与 enc2 重提的真机效果待用户验证。
+
 ## 2026-11-24 签到流程修复验证
 
 - 离线导出 Android bundle 时，Metro 报 `Failed to get the SHA-1`，最早缺失的是 Bun 依赖目录中 React Native `js-polyfills/console.js` 的索引。文件存在。按既有方案从仓库真实路径启动 Expo，并临时预加载仓库内文件的 SHA-1 计算脚本，Android bundle 和 Hermes 字节码均成功导出。

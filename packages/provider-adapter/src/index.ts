@@ -5,6 +5,7 @@ export { courses, courseCover } from './courses';
 export { activities, activityDetail } from './activities';
 export { signStatus, parseStatusPage, parseSubmitResponse, parseQrPayload, submit } from './sign';
 export { uploadPhoto } from './media';
+export { profileFaceId } from './face';
 export { withProviderDeadline } from './deadline';
 export { decodeClientId } from './device';
 export { md5Hex } from './crypto';

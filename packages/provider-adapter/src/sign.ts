@@ -361,7 +361,16 @@ export async function submit(
   if (qr) await assertCurrentQr(client, activity.id, qr.code);
   const url = await submissionUrl(client, account, current, input, faceMediaId);
   if (qr) url.searchParams.set('enc', qr.enc);
-  const result = parseSubmitResponse(await (await client.request(url.href, {}, 0, onSubmit)).text());
+  const raw = (await (await client.request(url.href, {}, 0, onSubmit)).text()).trim();
+  let result = parseSubmitResponse(raw);
+  // checkFace_<enc2>：第三方已记录人脸，要求带 enc2 原样重提一次即可通过。
+  const enc2 = raw.startsWith('checkFace_') ? raw.slice('checkFace_'.length) : '';
+  if (result.state === 'WAITING_FACE' && enc2 && faceMediaId) {
+    const retryUrl = await submissionUrl(client, account, current, input, faceMediaId);
+    if (qr) retryUrl.searchParams.set('enc', qr.enc);
+    retryUrl.searchParams.set('enc2', enc2);
+    result = parseSubmitResponse(await (await client.request(retryUrl.href)).text());
+  }
   if (result.state !== 'READY') return result;
   const verified = await readStatus(client, account, current).catch(() => undefined);
   return verified?.state === 'SIGNED'

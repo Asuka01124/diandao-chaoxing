@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Activity, ProviderSession } from '@sign/shared';
 import { signInputSchema } from '@sign/shared';
-import { ProviderError, RequestSession, activities, activityDetail, checkSession, parseQrPayload, parseStatusPage, parseSubmitResponse, submit, uploadPhoto, withProviderDeadline } from './index';
+import { ProviderError, RequestSession, activities, activityDetail, checkSession, parseQrPayload, parseStatusPage, parseSubmitResponse, profileFaceId, submit, uploadPhoto, withProviderDeadline } from './index';
 
 const session = (name: string): ProviderSession => ({ identifier: name, encryptedPassword: 'secret', cookies: [{ name: 'fid', value: name, domain: 'chaoxing.com', path: '/' }], userId: name, fid: '0', name, deviceCode: 'device' });
 const activity: Activity = { id: '123', courseId: '1', classId: '2', source: 'course', title: '签到', kind: 'click', startTime: null, endTime: null, signed: null, ext: '{}' };
@@ -112,6 +112,15 @@ describe('第三方响应解析', () => {
     expect((await submit(session('a'), activity, { kind: 'click' }, transport)).state).toBe('WAITING_FACE');
     expect(paths).not.toContain('/pptSign/stuSignajax');
     expect((await submit(session('a'), activity, { kind: 'click' }, transport, 'face-image')).state).toBe('SIGNED');
+  });
+  test('档案人脸直取：返回已录入照片 ID，未录入时报可理解错误', async () => {
+    const urls: string[] = [];
+    const transport = async (url: string) => { urls.push(url); return Response.json({ result: 1, data: { oldObjectId: 'face-object' } }); };
+    expect(await profileFaceId(session('a'), transport)).toBe('face-object');
+    expect(new URL(urls[0]).pathname).toBe('/v2/apis/sign/collectionfilephotoEnc');
+    for (const body of [{ result: 1, data: { oldObjectId: '' } }, { result: 1, data: null }, { result: 0 }]) {
+      await expect(profileFaceId(session('a'), async () => Response.json(body))).rejects.toMatchObject({ code: 'VALIDATION_FAILED', message: '该账号没有已录入的人脸照片' });
+    }
   });
 });
 

@@ -11,6 +11,7 @@ const behavior = {
   status: async (_id: string): Promise<SignStatus> => ({ state: 'READY' }),
   prepare: async (_id: string, _faceMediaId?: string): Promise<SignStatus | undefined> => undefined,
   upload: async (_id: string): Promise<{ mediaId: string }> => ({ mediaId: 'image' }),
+  profileFaceId: async (_id: string): Promise<string> => { throw new FakeClientError('VALIDATION_FAILED', '该账号没有已录入的人脸照片'); },
 };
 const clearedPhotos: string[] = [];
 const readPhotos: string[] = [];
@@ -30,6 +31,7 @@ mock.module('./api', () => ({
       return behavior.submit(s.userId);
     },
     upload: async (s: ProviderSession) => { providerCalls.push('upload'); return behavior.upload(s.userId); },
+    profileFaceId: async (s: ProviderSession) => { providerCalls.push('profileFaceId'); return behavior.profileFaceId(s.userId); },
   },
 }));
 const { createJob, runJob, isJobRunning, subscribeJobRunner, cleanupCompletedPhoto, replaceQrAndResume, replacePhotoAndRetry, provideFaceAndResume, retryAttempt, checkChallenge } = await import('./jobs');
@@ -43,7 +45,7 @@ function store() {
   data.accounts = ['a', 'b'].map(id => ({ id, label: id, role: id === 'a' ? 'primary' as const : 'delegate' as const, session: session(id), authorizedAt: '', state: 'VALID' }));
   return { get: () => data, update: async (change: (value: VaultData) => void) => { const next = structuredClone(data); change(next); data = next; } };
 }
-beforeEach(() => { counter = 0; clearedPhotos.length = 0; readPhotos.length = 0; providerCalls.length = 0; behavior.check = async s => s; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.prepare = async () => undefined; behavior.upload = async () => ({ mediaId: 'image' }); });
+beforeEach(() => { counter = 0; clearedPhotos.length = 0; readPhotos.length = 0; providerCalls.length = 0; behavior.check = async s => s; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.prepare = async () => undefined; behavior.upload = async () => ({ mediaId: 'image' }); behavior.profileFaceId = async () => { throw new FakeClientError('VALIDATION_FAILED', '该账号没有已录入的人脸照片'); }; });
 
 test('旧测试课程的六种任务不会调用学习通接口', async () => {
   const state = store();
@@ -201,6 +203,35 @@ test('二维码人脸等待在提供照片后携带照片继续提交', async ()
   seenFace.length = 0;
   await provideFaceAndResume(state, job.id, 'a', 'image-a');
   expect(seenFace).toEqual(['image-a']);
+  expect(state.get().attempts[0].state).toBe('SUCCESS');
+});
+
+test('人脸活动自动使用档案照片直签，并保留到任务供重试复用', async () => {
+  const state = store(); const seenFace: (string | undefined)[] = [];
+  behavior.profileFaceId = async id => `profile-${id}`;
+  behavior.prepare = async (_id, faceMediaId) => { seenFace.push(faceMediaId); return faceMediaId ? undefined : { state: 'WAITING_FACE' }; };
+  behavior.submit = async () => ({ state: 'SIGNED', submitted: true });
+  behavior.status = async () => ({ state: 'SIGNED' });
+  const faceActivity = { ...activity, requirements: { captcha: false, face: true, location: false, photo: false } };
+  const job = await createJob(state, faceActivity, ['a', 'b'], { kind: 'click' }); await runJob(state, job.id);
+  expect(seenFace).toEqual(['profile-a', 'profile-b']);
+  expect(state.get().attempts.map(a => a.state)).toEqual(['SUCCESS', 'SUCCESS']);
+  expect(state.get().jobs[0].faceMediaIdByAccount).toEqual({ a: 'profile-a', b: 'profile-b' });
+});
+
+test('档案人脸取不到时保留手动补照片流程，且不重复拉取已有照片', async () => {
+  const state = store(); let signed = false; const seenFace: (string | undefined)[] = [];
+  behavior.prepare = async (_id, faceMediaId) => { seenFace.push(faceMediaId); return faceMediaId ? undefined : { state: 'WAITING_FACE' }; };
+  behavior.submit = async () => { signed = true; return { state: 'SIGNED', submitted: true }; };
+  behavior.status = async () => ({ state: signed ? 'SIGNED' : 'READY' });
+  const faceActivity = { ...activity, requirements: { captcha: false, face: true, location: false, photo: false } };
+  const job = await createJob(state, faceActivity, ['a'], { kind: 'click' }); await runJob(state, job.id);
+  expect(state.get().attempts[0].state).toBe('WAITING_FACE');
+  expect(state.get().jobs[0].faceMediaIdByAccount).toBeUndefined();
+  seenFace.length = 0; providerCalls.length = 0;
+  await provideFaceAndResume(state, job.id, 'a', 'image-a');
+  expect(seenFace).toEqual(['image-a']);
+  expect(providerCalls).not.toContain('profileFaceId');
   expect(state.get().attempts[0].state).toBe('SUCCESS');
 });
 

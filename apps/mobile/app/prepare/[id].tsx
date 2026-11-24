@@ -196,7 +196,7 @@ export default function PrepareScreen() {
     {activity.kind === 'qr' && <><SectionTitle>验证流程</SectionTitle>
       <GroupedList>
         <SettingsRow title="活动二维码" value={qrReady ? '已扫描' : '待扫描'} detail={qrReady && oldQr ? '扫码时间较久，可以重新扫码' : undefined} onPress={openScanner} />
-        {activity.requirements?.face && <SettingsRow title="提交后需人脸验证" />}
+        {activity.requirements?.face && <SettingsRow title="人脸验证" value="自动使用已录入照片" />}
       </GroupedList>
     </>}
 
