@@ -8,6 +8,7 @@ import {
 } from '@sign/shared';
 import { readActivityDetail, readCourseActivities } from './activities';
 import { attendanceState } from './attendance';
+import { getOperationSignal } from './deadline';
 import { ProviderError } from './errors';
 import { buildFaceResult } from './face';
 import { json, responseMessage } from './response';
@@ -195,15 +196,30 @@ export function parseQrPayload(payload: string, expectedId: string): { enc: stri
 
 async function assertCurrentQr(client: RequestSession, activityId: string, code?: string): Promise<void> {
   if (!code) return;
-  const response = await json(await client.request(apiUrl('/newsign/signDetail', {
+  const url = apiUrl('/newsign/signDetail', {
     activePrimaryId: activityId,
     type: '1',
     msg: code,
-  }).href));
-  if (response.isOver === undefined || typeof response.signCode !== 'string') {
-    throw new ProviderError('PROVIDER_CHANGED', '动态二维码校验结果格式已变化');
+  }).href;
+  const unavailableMessage = '暂时无法确认二维码状态，请重试';
+  const canRetry = (error: unknown): error is ProviderError =>
+    error instanceof ProviderError && error.retryable && error.code !== 'RATE_LIMITED' && !getOperationSignal()?.aborted;
+
+  const reply = await client.request(url).catch((error: unknown) => {
+    if (canRetry(error)) return client.request(url);
+    throw error;
+  }).catch((error: unknown) => {
+    if (canRetry(error)) throw new ProviderError(error.code, unavailableMessage, true);
+    throw error;
+  });
+  const { isOver, signCode } = await json(reply).catch(() => {
+    throw new ProviderError('PROVIDER_CHANGED', unavailableMessage);
+  });
+  const currentCode = typeof signCode === 'number' && Number.isSafeInteger(signCode) ? String(signCode) : signCode;
+  if (isOver == null || typeof currentCode !== 'string' || !currentCode.trim()) {
+    throw new ProviderError('PROVIDER_CHANGED', unavailableMessage);
   }
-  if (Number(response.isOver) === 1 || response.signCode !== code) {
+  if (Number(isOver) === 1 || currentCode !== code) {
     throw new ProviderError('QR_EXPIRED', '动态二维码已过期，请重新扫描');
   }
 }

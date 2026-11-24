@@ -20,19 +20,45 @@ describe('第三方响应解析', () => {
     expect(() => parseQrPayload('https://mobilelearn.chaoxing.com/x?enc=abc', activity.id)).toThrow();
     expect(() => parseQrPayload('https://evil.example/x?aid=123&enc=abc', activity.id)).toThrow();
   });
-  test('动态二维码失效时不发送签到提交', async () => {
-    const paths: string[] = [];
+  const qrReply = (data: object) => () => Response.json(data);
+  const timeout = () => { throw new Error('timeout'); };
+  const unavailableMessage = '暂时无法确认二维码状态，请重试';
+  const expiredMessage = '动态二维码已过期，请重新扫描';
+  test.each([
+    ['数字签到码可以与扫码原文匹配', '123456', [qrReply({ isOver: 0, signCode: 123456 })], 'SIGNED', ''],
+    ['字符串签到码保留前导零', '012345', [qrReply({ isOver: '0', signCode: '012345' })], 'SIGNED', ''],
+    ['数字签到码不会吞掉扫码原文的前导零', '012345', [qrReply({ isOver: 0, signCode: 12345 })], 'QR_EXPIRED', expiredMessage],
+    ['活动已结束时不发送签到提交', '123456', [qrReply({ isOver: 1, signCode: 123456 })], 'QR_EXPIRED', expiredMessage],
+    ['缺少活动状态时无法确认', '123456', [qrReply({ signCode: 123456 })], 'PROVIDER_CHANGED', unavailableMessage],
+    ['缺少签到码时无法确认', '123456', [qrReply({ isOver: 0 })], 'PROVIDER_CHANGED', unavailableMessage],
+    ['超出安全整数范围的签到码无法确认', '9007199254740992', [qrReply({ isOver: 0, signCode: 9007199254740992 })], 'PROVIDER_CHANGED', unavailableMessage],
+    ['无效 JSON 时无法确认', '123456', [() => new Response('invalid json')], 'PROVIDER_CHANGED', unavailableMessage],
+    ['临时超时后重试校验并提交一次', '123456', [timeout, qrReply({ isOver: 0, signCode: 123456 })], 'SIGNED', ''],
+    ['连续超时仅重试一次后提示无法确认', '123456', [timeout, timeout], 'NETWORK_TIMEOUT', unavailableMessage],
+    ['被限流时不自动重试', '123456', [() => new Response('', { status: 429 })], 'RATE_LIMITED', '操作太频繁了，请稍等一会儿再试'],
+  ] as const)('%s', async (_label, code, replies, expected, message) => {
+    let checks = 0;
+    let submissions = 0;
     const transport = async (url: string) => {
-      const path = new URL(url).pathname; paths.push(path);
+      const path = new URL(url).pathname;
       if (path.endsWith('/getPPTActiveInfo')) return Response.json({ data: { otherId: 2, ifNeedVCode: 0, openCheckFaceFlag: 0, ifopenAddress: 0 } });
-      if (path.endsWith('/preSign')) return new Response('signstatus = 0');
+      if (path.endsWith('/preSign')) return new Response(`signstatus = ${submissions ? 1 : 0}`);
       if (path.endsWith('/analysis')) return new Response("code='+'abc'");
       if (path.endsWith('/analysis2')) return new Response('ok');
-      if (path.endsWith('/signDetail')) return Response.json({ isOver: 1, signCode: 'old' });
-      throw new Error('不应提交');
+      if (path.endsWith('/signDetail')) return replies[checks++]();
+      if (path.endsWith('/stuSignajax')) { submissions++; return new Response('success'); }
+      throw new Error('意外的请求');
     };
-    await expect(submit(session('a'), { ...activity, kind: 'qr' }, { kind: 'qr', qrPayload: 'https://mobilelearn.chaoxing.com/x?aid=123&enc=abc&c=old', scannedAt: new Date().toISOString() }, transport)).rejects.toMatchObject({ code: 'QR_EXPIRED' });
-    expect(paths).not.toContain('/pptSign/stuSignajax');
+    const outcome = submit(session('a'), { ...activity, kind: 'qr' }, {
+      kind: 'qr', qrPayload: `https://mobilelearn.chaoxing.com/x?aid=123&enc=abc&c=${code}`, scannedAt: new Date().toISOString(),
+    }, transport);
+    if (expected === 'SIGNED') {
+      expect(await outcome).toEqual({ state: 'SIGNED', submitted: true });
+    } else {
+      await expect(outcome).rejects.toMatchObject({ code: expected, message });
+    }
+    expect(checks).toBe(replies.length);
+    expect(submissions).toBe(expected === 'SIGNED' ? 1 : 0);
   });
   test('课程活动解析不把缺字段误认为空列表', async () => {
     const transport = async (url: string) => url.includes('/preSign') ? new Response('signstatus = 0') : Response.json({ data: { activeList: [{ id: 123, type: 2, otherId: '5', nameOne: '密码签到', startTime: 123456, userStatus: 0 }], ext: {} } });
