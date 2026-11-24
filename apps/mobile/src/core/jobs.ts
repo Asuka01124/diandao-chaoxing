@@ -46,9 +46,10 @@ async function verifySubmission(store: VaultAccess, job: Job, accountId: string,
 
 async function uploadSignPhoto(store: VaultAccess, jobId: string, accountId: string, session: ProviderSession): Promise<string> {
   const job = store.get().jobs.find(item => item.id === jobId);
-  if (!job?.photoUri) throw new ClientError('INVALID_INPUT', '照片已丢失，请重新选择');
+  const uri = job?.photoUriByAccount?.[accountId] ?? job?.photoUri;
+  if (!uri) throw new ClientError('INVALID_INPUT', '照片已丢失，请重新选择');
   const { readStagedPhoto } = await import('./media');
-  const photo = await readStagedPhoto(job.photoUri).catch(error => {
+  const photo = await readStagedPhoto(uri).catch(error => {
     throw new ClientError('INVALID_INPUT', error instanceof Error ? error.message : '无法读取照片，请重新选择');
   });
   const { mediaId } = await api.upload(session, photo);
@@ -142,33 +143,54 @@ export async function runJob(store: VaultAccess, jobId: string): Promise<void> {
   running.add(jobId);
   try {
     notifyRunnerListeners();
-    const job = store.get().jobs.find(j => j.id === jobId); if (!job) return;
+    if (!store.get().jobs.some(j => j.id === jobId)) return;
     await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'RUNNING'; });
-    for (const accountId of job.accountIds) {
-      const attempt = store.get().attempts.find(a => a.jobId === jobId && a.accountId === accountId);
-      if (!attempt || terminal.includes(attempt.state)) continue;
-      if (attempt.state === 'WAITING_QR') { await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'WAITING'; }); return; }
-      if (attempt.state.startsWith('WAITING_')) continue;
-      if (await executeAccount(store, job, accountId) === 'wait') { await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'WAITING'; }); return; }
+    for (;;) {
+      const job = store.get().jobs.find(j => j.id === jobId); if (!job) break;
+      const attempts = store.get().attempts.filter(a => a.jobId === jobId);
+      let next: string | undefined; let waitingQr = false;
+      for (const accountId of job.accountIds) {
+        const attempt = attempts.find(a => a.accountId === accountId);
+        if (!attempt || terminal.includes(attempt.state)) continue;
+        if (attempt.state === 'WAITING_QR') { waitingQr = true; break; }
+        if (attempt.state.startsWith('WAITING_')) continue;
+        next = accountId; break;
+      }
+      if (waitingQr) { await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'WAITING'; }); break; }
+      if (!next) {
+        // 队列清空才结束；判断与落库在同一同步回调内，避免重试刚排入就被判结束。
+        let idle = true;
+        await store.update(data => {
+          const item = data.jobs.find(j => j.id === jobId);
+          const pending = data.attempts.some(a => a.jobId === jobId && !terminal.includes(a.state) && !a.state.startsWith('WAITING_'));
+          if (pending) { idle = false; if (item) item.state = 'RUNNING'; }
+          else if (item) item.state = data.attempts.some(a => a.jobId === jobId && a.state.startsWith('WAITING_')) ? 'WAITING' : 'DONE';
+        });
+        if (idle) break;
+        continue;
+      }
+      if (await executeAccount(store, job, next) === 'wait') { await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.state = 'WAITING'; }); break; }
     }
-    await store.update(data => {
-      const item = data.jobs.find(j => j.id === jobId);
-      if (item) item.state = data.attempts.some(a => a.jobId === jobId && a.state.startsWith('WAITING_')) ? 'WAITING' : 'DONE';
-    });
-    await cleanupCompletedPhoto(store, jobId).catch(() => {});
   } finally { running.delete(jobId); notifyRunnerListeners(); }
+  await cleanupCompletedPhoto(store, jobId).catch(() => {});
+  // 释放执行器后再复查：落库间隙排入的重试由此接住，不会随任务结束而丢失。
+  if (store.get().attempts.some(a => a.jobId === jobId && !terminal.includes(a.state) && !a.state.startsWith('WAITING_'))) await runJob(store, jobId);
 }
 export async function cleanupCompletedPhoto(store: VaultAccess, jobId: string): Promise<void> {
   const job = store.get().jobs.find(j => j.id === jobId);
-  if (!job?.photoUri || job.state !== 'DONE') return;
+  if (!job || job.state !== 'DONE') return;
+  const uris = new Set<string>();
+  if (job.photoUri) uris.add(job.photoUri);
+  for (const uri of Object.values(job.photoUriByAccount ?? {})) uris.add(uri);
+  if (!uris.size) return;
   const photoInput = job.input.kind === 'photo' ? job.input : null;
   const retryNeedsFile = !isDemoActivity(job.activity) && photoInput !== null && job.accountIds.some(id =>
     !photoInput.mediaIdByAccount[id] && store.get().attempts.some(a => a.jobId === jobId && a.accountId === id && (a.state === 'FAILED' || a.state === 'REAUTH_REQUIRED')));
   // 需要重试的临时照片固定保留 24 小时。
   if (retryNeedsFile && Date.now() - Date.parse(job.createdAt) < 24 * 60 * 60_000) return;
   const { clearStagedPhoto } = await import('./media');
-  clearStagedPhoto(job.photoUri);
-  await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) item.photoUri = undefined; });
+  for (const uri of uris) clearStagedPhoto(uri);
+  await store.update(data => { const item = data.jobs.find(j => j.id === jobId); if (item) { item.photoUri = undefined; item.photoUriByAccount = undefined; } });
 }
 export async function replaceQrAndResume(store: VaultAccess, jobId: string, qrPayload: string, scannedAt: string): Promise<void> {
   if (!signInputSchema.safeParse({ kind: 'qr', qrPayload, scannedAt }).success) throw new Error('二维码扫描信息无效，请重新扫描');
@@ -190,15 +212,18 @@ export async function retryAttempt(store: VaultAccess, jobId: string, accountId:
   await runJob(store, jobId);
 }
 export async function replacePhotoAndRetry(store: VaultAccess, jobId: string, accountId: string, photoUri: string): Promise<void> {
-  let oldUri: string | undefined;
+  let oldReplacement: string | undefined;
   await store.update(data => {
     const job = data.jobs.find(j => j.id === jobId);
     const attempt = data.attempts.find(a => a.jobId === jobId && a.accountId === accountId);
     if (!job || job.input.kind !== 'photo' || !attempt || attempt.state !== 'FAILED') throw new Error('当前账号不能替换照片');
-    oldUri = job.photoUri; job.photoUri = photoUri; attempt.state = 'QUEUED'; job.state = 'RUNNING';
+    oldReplacement = job.photoUriByAccount?.[accountId];
+    job.photoUriByAccount = { ...job.photoUriByAccount, [accountId]: photoUri };
+    attempt.state = 'QUEUED'; job.state = 'RUNNING';
     delete job.input.mediaIdByAccount[accountId];
   });
-  if (oldUri && oldUri !== photoUri) { const { clearStagedPhoto } = await import('./media'); clearStagedPhoto(oldUri); }
+  // 只清理该账号上一张替换图，共用原图留给尚未上传的其他账号。
+  if (oldReplacement && oldReplacement !== photoUri) { const { clearStagedPhoto } = await import('./media'); clearStagedPhoto(oldReplacement); }
   await runJob(store, jobId);
 }
 export async function checkChallenge(store: VaultAccess, jobId: string, accountId: string): Promise<void> {

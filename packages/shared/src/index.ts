@@ -52,7 +52,7 @@ export const attemptStates = ['QUEUED', 'PREFLIGHT', 'SUBMITTING', 'VERIFYING', 
 export type AttemptState = typeof attemptStates[number];
 export type Account = { id: string; label: string; role: 'primary' | 'delegate'; session: ProviderSession; authorizedAt: string; verifiedAt?: string; state: 'VALID' | 'UNKNOWN' | 'REAUTH_REQUIRED' };
 export type ReservedPhoto = { id: string; createdAt: string; name?: string };
-export type Job = { id: string; activity: Activity; input: SignInput; accountIds: string[]; photoUri?: string; faceMediaIdByAccount?: Record<string, string>; createdAt: string; state: 'RUNNING' | 'WAITING' | 'DONE' };
+export type Job = { id: string; activity: Activity; input: SignInput; accountIds: string[]; photoUri?: string; photoUriByAccount?: Record<string, string>; faceMediaIdByAccount?: Record<string, string>; createdAt: string; state: 'RUNNING' | 'WAITING' | 'DONE' };
 export type Attempt = { jobId: string; accountId: string; state: AttemptState; count: number; updatedAt: string; message?: string; code?: string };
 export type VaultData = { schemaVersion: 2; accounts: Account[]; activityCache: Activity[]; jobs: Job[]; attempts: Attempt[]; settings: { favoriteLocations: LocationInput[]; reservedPhotos: ReservedPhoto[] } };
 export const emptyVault = (): VaultData => ({ schemaVersion: 2, accounts: [], activityCache: [], jobs: [], attempts: [], settings: { favoriteLocations: [], reservedPhotos: [] } });

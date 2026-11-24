@@ -12,8 +12,9 @@ const behavior = {
   upload: async (_id: string): Promise<{ mediaId: string }> => ({ mediaId: 'image' }),
 };
 const clearedPhotos: string[] = [];
+const readPhotos: string[] = [];
 const providerCalls: string[] = [];
-mock.module('./media', () => ({ readStagedPhoto: async () => 'jpeg-base64', clearStagedPhoto: (uri: string) => { clearedPhotos.push(uri); } }));
+mock.module('./media', () => ({ readStagedPhoto: async (uri: string) => { readPhotos.push(uri); return 'jpeg-base64'; }, clearStagedPhoto: (uri: string) => { clearedPhotos.push(uri); } }));
 mock.module('./api', () => ({
   ClientError: FakeClientError,
   api: {
@@ -30,7 +31,7 @@ mock.module('./api', () => ({
     upload: async (s: ProviderSession) => { providerCalls.push('upload'); return behavior.upload(s.userId); },
   },
 }));
-const { createJob, runJob, isJobRunning, subscribeJobRunner, cleanupCompletedPhoto, replaceQrAndResume, provideFaceAndResume, retryAttempt, checkChallenge } = await import('./jobs');
+const { createJob, runJob, isJobRunning, subscribeJobRunner, cleanupCompletedPhoto, replaceQrAndResume, replacePhotoAndRetry, provideFaceAndResume, retryAttempt, checkChallenge } = await import('./jobs');
 
 const activity: Activity = { id: 'act', courseId: 'course', classId: 'class', source: 'course', title: '测试签到', kind: 'click', startTime: null, endTime: null, signed: null, ext: '{}' };
 const legacyActivities = (): Activity[] => (['click', 'location', 'photo', 'qr', 'code', 'gesture'] as const)
@@ -41,7 +42,7 @@ function store() {
   data.accounts = ['a', 'b'].map(id => ({ id, label: id, role: id === 'a' ? 'primary' as const : 'delegate' as const, session: session(id), authorizedAt: '', state: 'VALID' }));
   return { get: () => data, update: async (change: (value: VaultData) => void) => { const next = structuredClone(data); change(next); data = next; } };
 }
-beforeEach(() => { counter = 0; clearedPhotos.length = 0; providerCalls.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.prepare = async () => undefined; behavior.upload = async () => ({ mediaId: 'image' }); });
+beforeEach(() => { counter = 0; clearedPhotos.length = 0; readPhotos.length = 0; providerCalls.length = 0; behavior.submit = async () => ({ state: 'READY' }); behavior.status = async () => ({ state: 'READY' }); behavior.prepare = async () => undefined; behavior.upload = async () => ({ mediaId: 'image' }); });
 
 test('旧测试课程的六种任务不会调用学习通接口', async () => {
   const state = store();
@@ -324,4 +325,45 @@ test('结果页区分正在执行和需要恢复的任务', async () => {
     expect(state.get().jobs[0].state).toBe('WAITING');
     expect(state.get().attempts[0].state).toBe('WAITING_FACE');
   } finally { unsubscribe(); }
+});
+
+test('替换照片按账号隔离，其他账号重试仍用共用原图', async () => {
+  const state = store();
+  behavior.upload = async () => { throw new FakeClientError('UNKNOWN', '上传失败'); };
+  const orig = 'file:///cache/sign-photo-orig.jpg';
+  const job = await createJob(state, { ...activity, kind: 'photo' }, ['a', 'b'], { kind: 'photo', mediaIdByAccount: {} }, orig);
+  await runJob(state, job.id);
+  expect(state.get().attempts.map(a => a.state)).toEqual(['FAILED', 'FAILED']);
+  expect(readPhotos).toEqual([orig, orig]);
+  readPhotos.length = 0;
+  const replacement = 'file:///cache/sign-photo-new.jpg';
+  await replacePhotoAndRetry(state, job.id, 'a', replacement);
+  expect(readPhotos).toEqual([replacement]);
+  expect(state.get().jobs[0].photoUri).toBe(orig);
+  expect(state.get().jobs[0].photoUriByAccount).toEqual({ a: replacement });
+  expect(clearedPhotos).toEqual([]);
+  readPhotos.length = 0;
+  behavior.upload = async id => ({ mediaId: `image-${id}` });
+  behavior.submit = async () => ({ state: 'SIGNED', submitted: true });
+  await retryAttempt(state, job.id, 'b');
+  expect(readPhotos).toEqual([orig]);
+  expect(state.get().attempts.find(a => a.accountId === 'b')?.state).toBe('SUCCESS');
+});
+
+test('执行中重试失败账号会被执行器接住，队列清空才结束任务', async () => {
+  const state = store();
+  const job = await createJob(state, activity, ['a', 'b'], { kind: 'click' });
+  const submitted: string[] = [];
+  let retried = false;
+  behavior.submit = async id => {
+    submitted.push(id);
+    if (id === 'a' && !retried) throw new FakeClientError('UNKNOWN', '失败');
+    if (id === 'b' && !retried) { retried = true; await retryAttempt(state, job.id, 'a'); }
+    return { state: 'SIGNED', submitted: true };
+  };
+  behavior.status = async () => ({ state: 'SIGNED' });
+  await runJob(state, job.id);
+  expect(submitted).toEqual(['a', 'b', 'a']);
+  expect(state.get().attempts.map(a => a.state)).toEqual(['SUCCESS', 'SUCCESS']);
+  expect(state.get().jobs[0].state).toBe('DONE');
 });

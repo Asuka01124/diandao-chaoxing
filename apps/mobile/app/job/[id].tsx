@@ -85,7 +85,7 @@ export default function JobScreen() {
   async function retryWithPhoto(accountId: string, sourceUri: string) {
     const staged = await stagePhoto(sourceUri);
     try { await replacePhotoAndRetry(store, id, accountId, staged); return true; }
-    catch (error) { if (store.get().jobs.find(j => j.id === id)?.photoUri !== staged) clearStagedPhoto(staged); throw error; }
+    catch (error) { const saved = store.get().jobs.find(j => j.id === id); if (saved?.photoUriByAccount?.[accountId] !== staged && saved?.photoUri !== staged) clearStagedPhoto(staged); throw error; }
   }
 
   const attempts = data.attempts.filter(a => a.jobId === id);
